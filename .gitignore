@@ -1,0 +1,10 @@
+.DS_Store
+*.mp4
+*.mov
+*.zip
+*.jpg
+*.png
+*.csv
+Movie Recordings/
+Manual Data Collection/Data Folders (MP4 and JSON)/
+rancho/
