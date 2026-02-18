@@ -7,5 +7,6 @@
 *.csv
 Movie Recordings/
 Manual Data Collection/Data Folders (MP4 and JSON)/
+Manual Data Collection/Unused
 rancho/
 133_test.json
