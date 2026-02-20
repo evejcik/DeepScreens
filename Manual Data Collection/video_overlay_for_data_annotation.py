@@ -71,9 +71,9 @@ def draw_bbox_and_label(img, instance, instance_ind, label):
     y2 = clamp_int(y2, 0, h - 1)
 
     color = color_for_inst(instance_ind)
-    cv2.rectangle(img, (x1, y1), (x2, y2), color, 4)
+    cv2.rectangle(img, (x1, y1+140), (x2, y2+140), color, 1)
 
-    txt_y = y1 + 20
+    txt_y = y1 + 160
     cv2.putText(
         img, label, (x1, txt_y),
         cv2.FONT_HERSHEY_SIMPLEX, 0.6,
@@ -254,9 +254,6 @@ def main(mp4_path, json_path, start, end, new_df):
                 x2 = max(0, min(w-1, x2))
                 y2 = max(0, min(h-1, y2))
                 cv2.rectangle(img, (x1, y1), (x2, y2), colour, thickness)
-
-            # inside the loop, after draw_bbox_and_label():
-            # draw_box(frame, vis_bbox, (0, 255, 255), thickness=1)   # yellow
 
             
 
