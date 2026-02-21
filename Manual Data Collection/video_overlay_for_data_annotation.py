@@ -6,6 +6,11 @@ import numpy as np
 import argparse
 import pandas as pd
 
+import gspread
+from google.auth.transport.requests import Request
+from google.oauth2.service_account import Credentials
+
+
 #get instances per frame id
 #get 2d keypoint scores per instance per frame id
 #get 3d keypoint scores per instance per frame id
@@ -42,7 +47,7 @@ def frame_to_instances_map(data):
 
     return frame_map
 
-def new_df(data, keypoint_id2name):
+def new_df(data, keypoint_id2name, lower_body_ids):
     #takes in json data
     #returns dataframe with one row per frame per instance per joint
 
@@ -58,30 +63,34 @@ def new_df(data, keypoint_id2name):
             confidences = instance.get('keypoint_scores', [])
 
             for joint_id, keypoint in enumerate(keypoints):
-                joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
-                x,y = keypoint[0], keypoint[1]
-                confidence = confidences[joint_id] if confidences else None
+                if joint_id in data['meta_info_3d']['lower_body_ids']:
+                    joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
+                    x,y = keypoint[0], keypoint[1]
+                    confidence = confidences[joint_id] if confidences else None
 
-                row = {
-                    'frame_id': frame_id,
-                    'instance_id': instance_ind,
-                    'track_id': track_id,
-                    'joint_id': joint_id,
-                    'joint_name': joint_name,
-                    'x': x,
-                    'y': y,
-                    'mmpose_confidence': confidence,
-                    # Manual Columns Below
-                    'visibility_category': None,
-                    'occlusion_severity': None,
-                    'occlusion_reason': None,
-                    'temporal_pattern': None,
-                    'annotator_confidence': None,
-                    'reason_for_low_confidence': None,
-                    'valid': None,
-                    'notes': None
-                }
-                rows.append(row)
+                    row = {
+                        'frame_id': frame_id,
+                        'instance_id': instance_ind,
+                        'track_id': track_id,
+                        'joint_id': joint_id,
+                        'joint_name': joint_name,
+                        
+                        # Manual Columns Below
+                        'visibility_category': None,
+                        'occlusion_severity': None,
+                        'occlusion_reason': None,
+                        'temporal_pattern': None,
+                        'annotator_confidence': None,
+                        'reason_for_low_confidence': None,
+                        'valid': None,
+                        'notes': None,
+                        
+                        #for later analysis
+                        'x': x,
+                        'y': y,
+                        'mmpose_confidence': confidence,
+                    }
+                    rows.append(row)
     df = pd.DataFrame(rows)
     return df
 
@@ -193,12 +202,136 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
     return vis_bbox.tolist()
 
 
+def push_dataframe_to_google_sheets(df, spreadsheet_name, json_keyfile_path):
+
+    scope = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+    ]
+    creds = Credentials.from_service_account_file(json_keyfile_path, scopes=scope)
+    client = gspread.authorize(creds)
+    try:
+        # Open existing sheet or create new one
+        spreadsheet = client.open(spreadsheet_name)
+        worksheet = spreadsheet.sheet1
+        worksheet.clear()
+    except gspread.exceptions.SpreadsheetNotFound:
+        # Create new spreadsheet if it doesn't exist
+        spreadsheet = client.create(spreadsheet_name)
+        worksheet = spreadsheet.sheet1
+    
+    # Write dataframe to sheet
+    print(f"Writing {len(df)} rows to Google Sheet...")
+    worksheet.append_row(df.columns.tolist())
+    for idx, row in df.iterrows():
+        worksheet.append_row(row.tolist())
+    
+    # Define dropdown options 
+    validation_rules = {
+        'visibility_category': {
+            'column': 'F',
+            'options': ['0', '1', '2', '3'],
+            'help_text': '0=Visible, 1=Occluded, 2=Off-screen, 3=Ambiguous'
+        },
+        'occlusion_severity': {
+            'column': 'G',
+            'options': ['0', '1', '2', '3'],
+            'help_text': '0=0-25%, 1=25-50%, 2=50-75%, 3=75-100%'
+        },
+        'occlusion_reason': {
+            'column': 'H',
+            'options': [
+                'self_occlusion',
+                'clothing',
+                'external_object',
+                'external_character',
+                'atmospheric',
+                'hallucinated'
+            ],
+            'help_text': 'Select one or more reasons'
+        },
+        'temporal_pattern': {
+            'column': 'I',
+            'options': [
+                'first_appearance',
+                'persistent',
+                'intermittent',
+                'correcting',
+                'degrading'
+            ],
+            'help_text': 'Select temporal pattern'
+        },
+        'annotator_confidence': {
+            'column': 'J',
+            'options': ['1', '2', '3', '4', '5'],
+            'help_text': '1=Guessing, 5=Certain'
+        },
+        'reason_for_low_confidence':{
+            'column': 'K',
+            'options': ['motion_blur',
+                        'low_image_resolution',
+                        'lighting_conditions',
+                        'unclear_boundary_between_body_and_clothing',
+                        'unclear_boundary_between_body_and_other',
+                        'multiple_impossible_interpretations',
+                        'self_occlusion_vs_external_occlusion_confusion'],
+            'help_text': 'when annotator_confidence < 4'
+        }
+    }
+    
+    # Get total number of rows (including header)
+    num_rows = len(df) + 2
+    
+    # Apply data validations
+    print("Adding dropdown validations...")
+    for field_name, rule in validation_rules.items():
+        col = rule['column']
+        data_range = f"{col}2:{col}{num_rows}"
+        
+        try:
+            request = {
+                "setDataValidation": {
+                    "range": {
+                        "sheetId": worksheet.id,
+                        "startRowIndex": 1,  # Skip header
+                        "endRowIndex": num_rows,
+                        "startColumnIndex": ord(col) - ord('A'),
+                        "endColumnIndex": ord(col) - ord('A') + 1
+                    },
+                    "rule": {
+                        "condition": {
+                            "type": "LIST",
+                            "values": [
+                                {"userEnteredValue": opt} for opt in rule['options']
+                            ]
+                        },
+                        "inputMessage": rule['help_text'],
+                        "strict": True,
+                        "showCustomUI": True
+                    }
+                }
+            }
+            
+            spreadsheet.batch_update(request)
+            print(f"✓ Added validation for {field_name}")
+            
+        except Exception as e:
+            print(f"⚠ Could not add validation for {field_name}: {e}")
+    
+    print(f"\nSheet created successfully!")
+    print(f"Access it here: https://docs.google.com/spreadsheets/d/{spreadsheet.id}")
+    
+    return spreadsheet.id
+
+
 def main(mp4_path, json_path, start, end, create_new_df):
    
     # ap.add_argument("--output_dir", required = True)
+    # credentials_path = Path(__file__).parent / "Google Cloud Credentials" / "credentials.json"
+    credentials_path = Path('Google Cloud Credentials/credentials.json')
 
     json_data = load_json(json_path)
-    meta = json_data['meta_info'] 
+    meta = json_data['meta_info_3d'] 
     instances_map = frame_to_instances_map(json_data)
     cap = cv2.VideoCapture(mp4_path)
 
@@ -220,9 +353,19 @@ def main(mp4_path, json_path, start, end, create_new_df):
             os.remove(data)
             print(f"{data} has been deleted.")
 
-        df = new_df(json_data, json_data['meta_info']['keypoint_id2name'])
+        df = new_df(json_data, json_data['meta_info_3d']['keypoint_id2name'], json_data['meta_info_3d']['lower_body_ids'])
         df.to_csv("rows_df.csv", index = False)
-        print(f"Created and saved new dataset with {len(df)} rows.")
+        print(f"Created new dataset with {len(df)} rows.")
+
+        try:
+            sheet_id = push_dataframe_to_google_sheets(
+                df,
+                spreadsheet_name="DeepScreens_Annotation",
+                json_keyfile_path=str(credentials_path)
+            )
+        except Exception as e:
+            print(f"⚠ Could not push to Google Sheets: {e}")
+            print("Continuing with CSV only...")
         create_new_df = 0
             
     ##MAKING NEW DATASET END
