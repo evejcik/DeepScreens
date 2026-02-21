@@ -42,6 +42,49 @@ def frame_to_instances_map(data):
 
     return frame_map
 
+def new_df(data, keypoint_id2name):
+    #takes in json data
+    #returns dataframe with one row per frame per instance per joint
+
+    rows = []
+
+    for frame in data['instance_info']:
+        frame_id = int(frame['frame_id']) - 1
+        instances = frame.get('instances', [])
+
+        for instance_ind, instance in enumerate(instances):
+            track_id = instance.get('track_id', None)
+            keypoints = instance.get('keypoints', [])
+            confidences = instance.get('keypoint_scores', [])
+
+            for joint_id, keypoint in enumerate(keypoints):
+                joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
+                x,y = keypoint[0], keypoint[1]
+                confidence = confidences[joint_id] if confidences else None
+
+                row = {
+                    'frame_id': frame_id,
+                    'instance_id': instance_ind,
+                    'track_id': track_id,
+                    'joint_id': joint_id,
+                    'joint_name': joint_name,
+                    'x': x,
+                    'y': y,
+                    'mmpose_confidence': confidence,
+                    # Manual Columns Below
+                    'visibility_category': None,
+                    'occlusion_severity': None,
+                    'occlusion_reason': None,
+                    'temporal_pattern': None,
+                    'annotator_confidence': None,
+                    'reason_for_low_confidence': None,
+                    'valid': None,
+                    'notes': None
+                }
+                rows.append(row)
+    df = pd.DataFrame(rows)
+    return df
+
 def keypoints2D(instance):
     kps = np.array(instance['keypoints']) #gets the list of points of hwere the keypoints are at this one instance
     scores = np.array(instance.get('keypoint_scores', [])) #gets the scores associated with these keypoints
@@ -150,7 +193,7 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
     return vis_bbox.tolist()
 
 
-def main(mp4_path, json_path, start, end, new_df):
+def main(mp4_path, json_path, start, end, create_new_df):
    
     # ap.add_argument("--output_dir", required = True)
 
@@ -168,40 +211,21 @@ def main(mp4_path, json_path, start, end, new_df):
     if end < 0:
         end = total - 1
 
-    if new_df == 1:
+    data = "rows_df.csv"
+
+    if create_new_df == 1: ##MAKING NEW DATASET START
         rows = []
-        df_rows_path = "rows_df.csv"
-        if os.path.exists(df_rows_path):
-            os.remove(df_rows_path)
-            print(f"{df_rows_path} has been deleted.")
 
-        # new_df = 1
-        while new_df <= total:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id) #sets what frame im at
+        if os.path.exists(data):
+            os.remove(data)
+            print(f"{data} has been deleted.")
 
-            # if frame_id > end:
-            #     break
-
-            ok, frame = cap.read()
-            if not ok:
-                break
-
-            instances = instances_map.get(frame_id, [])
-                
-            for instance_ind, instance in enumerate(instances):
-                track_id = instance.get('track_id', None)
-                rows.append((frame_id, instance_ind, track_id))
-            frame_id +=1
+        df = new_df(json_data, json_data['meta_info']['keypoint_id2name'])
+        df.to_csv("rows_df.csv", index = False)
+        print(f"Created and saved new dataset with {len(df)} rows.")
+        create_new_df = 0
             
-
-
-            df = pd.DataFrame(rows,columns = ['frame_id', 'instance_id', 'track_id'] )
-            # print(df.head())
-            df.to_csv("rows_df.csv", index = False)
-
-            new_df = 0
-
-        # cap.release()
+    ##MAKING NEW DATASET END
 
     
     cv2.namedWindow("overlay", cv2.WINDOW_NORMAL)
@@ -280,9 +304,9 @@ if __name__ == "__main__":
     ap.add_argument("--json", required = True)
     ap.add_argument("--mp4", required = True)
     ap.add_argument("--end", type = int, required = True)
-    ap.add_argument("--new_df", type = int)
+    ap.add_argument("--create_new_df", type = int)
     ap.add_argument("--start", type = int)
 
     args = ap.parse_args()
-    main(args.mp4, args.json, args.start, args.end, args.new_df)
+    main(args.mp4, args.json, args.start, args.end, args.create_new_df)
 
