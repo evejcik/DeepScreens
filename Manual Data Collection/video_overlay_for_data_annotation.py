@@ -10,6 +10,16 @@ import gspread
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
 
+from google.auth import default
+from google.auth.transport.requests import Request
+
+# creds, project = default(scopes=[
+#     'https://www.googleapis.com/auth/spreadsheets',
+#     'https://www.googleapis.com/auth/drive'
+# ])
+
+# client = gspread.authorize(creds)
+
 
 #get instances per frame id
 #get 2d keypoint scores per instance per frame id
@@ -47,7 +57,7 @@ def frame_to_instances_map(data):
 
     return frame_map
 
-def new_df(data, keypoint_id2name, lower_body_ids):
+def old_df(data, keypoint_id2name, lower_body_ids):
     #takes in json data
     #returns dataframe with one row per frame per instance per joint
 
@@ -168,7 +178,7 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
     list of 4 floats – bbox transformed into the visualiser’s internal space
     """
     # --------------------------------------------------------------
-    # 1️⃣  Determine centre and scale
+    # Determine centre and scale
     # --------------------------------------------------------------
     if isinstance(meta, dict) and 'stats_info' in meta:
         stats   = meta['stats_info']
@@ -184,7 +194,7 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
         scale  = float(max(w, h))
 
     # --------------------------------------------------------------
-    # 2️⃣  Validate the bbox shape and reshape to (2,2)
+    #  Validate the bbox shape and reshape to (2,2)
     # --------------------------------------------------------------
     raw = np.asarray(json_bbox, dtype=np.float32).reshape(-1)
     if raw.size != 4:
@@ -193,13 +203,67 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
     pts = raw.reshape(2, 2)                 # [[x1, y1], [x2, y2]]
 
     # --------------------------------------------------------------
-    # 3️⃣  Apply the *exact* normalise → denormalise that the visualiser uses
+    # Apply the *exact* normalise → denormalise that the visualiser uses
     # --------------------------------------------------------------
     norm      = (pts - centre) / scale       # normalise each (x,y) pair
     vis_pts   = norm * scale + centre        # denormalise → visualiser space
     vis_bbox  = vis_pts.reshape(4)           # back to flat [x1, y1, x2, y2]
 
     return vis_bbox.tolist()
+
+
+def new_df(data, keypoint_id2name, lower_body_ids):
+    rows = []
+    frame_count = 0
+    instance_count = 0
+    joint_count = 0
+    
+    for frame in data['instance_info']:
+        frame_id = int(frame['frame_id']) - 1
+        instances = frame.get('instances', [])
+        frame_count += 1
+        
+        for instance_ind, instance in enumerate(instances):
+            instance_count += 1
+            track_id = instance.get('track_id', None)
+            keypoints = instance.get('keypoints', [])
+            confidences = instance.get('keypoint_scores', [])
+            
+            for joint_id, keypoint in enumerate(keypoints):
+                if joint_id in data['meta_info_3d']['lower_body_ids']:
+                    joint_count += 1
+                    joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
+                    x, y = keypoint[0], keypoint[1]
+                    confidence = confidences[joint_id] if joint_id < len(confidences) else None
+                    
+                    row = {
+                        'frame_id': frame_id,
+                        'instance_id': instance_ind,
+                        'track_id': track_id,
+                        'joint_id': joint_id,
+                        'joint_name': joint_name,
+                        'visibility_category': None,
+                        'occlusion_severity': None,
+                        'occlusion_reason': None,
+                        'temporal_pattern': None,
+                        'annotator_confidence': None,
+                        'reason_for_low_confidence': None,
+                        'valid': None,
+                        'notes': None,
+                        'x': x,
+                        'y': y,
+                        'mmpose_confidence': confidence,
+                    }
+                    rows.append(row)
+    
+    # Print debug info
+    print(f"DEBUG: Total frames: {frame_count}")
+    print(f"DEBUG: Total instances: {instance_count}")
+    print(f"DEBUG: Total lower body joints: {joint_count}")
+    print(f"DEBUG: Expected rows (if all had lower body): {frame_count * 2 * 7}")
+    
+    df = pd.DataFrame(rows)
+    return df
 
 
 def push_dataframe_to_google_sheets(df, spreadsheet_name, json_keyfile_path):
@@ -354,18 +418,18 @@ def main(mp4_path, json_path, start, end, create_new_df):
             print(f"{data} has been deleted.")
 
         df = new_df(json_data, json_data['meta_info_3d']['keypoint_id2name'], json_data['meta_info_3d']['lower_body_ids'])
-        df.to_csv("rows_df.csv", index = False)
+        df.to_csv("rows_df_test.csv", index = False)
         print(f"Created new dataset with {len(df)} rows.")
 
-        try:
-            sheet_id = push_dataframe_to_google_sheets(
-                df,
-                spreadsheet_name="DeepScreens_Annotation",
-                json_keyfile_path=str(credentials_path)
-            )
-        except Exception as e:
-            print(f"⚠ Could not push to Google Sheets: {e}")
-            print("Continuing with CSV only...")
+        # try:
+        #     sheet_id = push_dataframe_to_google_sheets(
+        #         df,
+        #         spreadsheet_name="DeepScreens_Annotation",
+        #         json_keyfile_path=str(credentials_path)
+        #     )
+        # except Exception as e:
+        #     print(f"⚠ Could not push to Google Sheets: {e}")
+        #     print("Continuing with CSV only...")
         create_new_df = 0
             
     ##MAKING NEW DATASET END
