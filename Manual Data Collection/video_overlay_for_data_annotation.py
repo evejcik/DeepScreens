@@ -133,9 +133,9 @@ def draw_bbox_and_label(img, instance, instance_ind, label):
     y2 = clamp_int(y2, 0, h - 1)
 
     color = color_for_inst(instance_ind)
-    cv2.rectangle(img, (x1, y1+140), (x2, y2+140), color, 1)
+    cv2.rectangle(img, (x1, y1+125), (x2, y2+125), color, 1)
 
-    txt_y = y1 + 160
+    txt_y = y1 + 135
     cv2.putText(
         img, label, (x1, txt_y),
         cv2.FONT_HERSHEY_SIMPLEX, 0.6,
