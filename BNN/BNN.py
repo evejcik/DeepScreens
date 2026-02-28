@@ -4,6 +4,7 @@
 Created on Mon May 17 13:05:55 2021
 
 @author: laurent
+#Source: https://arxiv.org/pdf/2007.06823
 """
 
 import numpy as np
