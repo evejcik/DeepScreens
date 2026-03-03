@@ -256,14 +256,14 @@ def new_df(data, keypoint_id2name, lower_body_ids):
                     }
                     rows.append(row)
     
-    # Print debug info
-    print(f"DEBUG: Total frames: {frame_count}")
-    print(f"DEBUG: Total instances: {instance_count}")
-    print(f"DEBUG: Total lower body joints: {joint_count}")
-    print(f"DEBUG: Expected rows (if all had lower body): {frame_count * 2 * 7}")
+    # # Print debug info
+    # print(f"DEBUG: Total frames: {frame_count}")
+    # print(f"DEBUG: Total instances: {instance_count}")
+    # print(f"DEBUG: Total lower body joints: {joint_count}")
+    # print(f"DEBUG: Expected rows (if all had lower body): {frame_count * 2 * 7}")
     
-    df = pd.DataFrame(rows)
-    return df
+    # df = pd.DataFrame(rows)
+    # return df
 
 
 def push_dataframe_to_google_sheets(df, spreadsheet_name, json_keyfile_path):
