@@ -388,7 +388,7 @@ def push_dataframe_to_google_sheets(df, spreadsheet_name, json_keyfile_path):
     return spreadsheet.id
 
 
-# def main(mp4_path, json_path, start, end, create_new_df):
+def main(mp4_path, json_path, start, end, create_new_df):
    
     # ap.add_argument("--output_dir", required = True)
     # credentials_path = Path(__file__).parent / "Google Cloud Credentials" / "credentials.json"
