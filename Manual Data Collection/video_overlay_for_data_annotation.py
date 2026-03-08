@@ -37,9 +37,15 @@ from google.auth.transport.requests import Request
 
 def load_json(json_path):
     #takes in json file
-    json_file_path = Path(json_path)
+    # json_file_path = Path(json_path)
+    p = Path(json_path)
+    p_dict = {
+                'file_name': p.name,
+                ' parent_dict': p.parent.name,
+                'full_path': p.parent
+            }
     #returns dataset containing per frame, array of name instances
-    with open(json_file_path, 'r') as j_file:
+    with open(p, 'r') as j_file:
         return json.load(j_file)
 
 
@@ -245,7 +251,6 @@ def new_df(data, keypoint_id2name, lower_body_ids):
                         'visibility_category': None,
                         'occlusion_severity': None,
                         'occlusion_reason': None,
-                        'temporal_pattern': None,
                         'annotator_confidence': None,
                         'reason_for_low_confidence': None,
                         'valid': None,
@@ -418,8 +423,8 @@ def main(mp4_path, json_path, start, end, create_new_df):
             print(f"{data} has been deleted.")
 
         df = new_df(json_data, json_data['meta_info_3d']['keypoint_id2name'], json_data['meta_info_3d']['lower_body_ids'])
-        df.to_csv("rows_df_test.csv", index = False)
-        print(f"Created new dataset with {len(df)} rows.")
+        df.to_csv(f"rows_df_test.csv", index = False)
+        print(f"Created new dataset with {len(df)} rows. Columns = [{df.columns}]")
 
         # try:
         #     sheet_id = push_dataframe_to_google_sheets(
@@ -510,7 +515,7 @@ if __name__ == "__main__":
     
     ap.add_argument("--json", required = True)
     ap.add_argument("--mp4", required = True)
-    ap.add_argument("--end", type = int, required = True)
+    ap.add_argument("--end", type = int)
     ap.add_argument("--create_new_df", type = int)
     ap.add_argument("--start", type = int)
 
