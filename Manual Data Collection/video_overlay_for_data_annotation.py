@@ -41,12 +41,12 @@ def load_json(json_path):
     p = Path(json_path)
     p_dict = {
                 'file_name': p.name,
-                ' parent_dict': p.parent.name,
+                ' parent_dir': p.parent.name,
                 'full_path': p.parent
             }
     #returns dataset containing per frame, array of name instances
     with open(p, 'r') as j_file:
-        return json.load(j_file)
+        return json.load(j_file), p_dict
 
 
 def frame_to_instances_map(data):
@@ -399,7 +399,7 @@ def main(mp4_path, json_path, start, end, create_new_df):
     # credentials_path = Path(__file__).parent / "Google Cloud Credentials" / "credentials.json"
     credentials_path = Path('Google Cloud Credentials/credentials.json')
 
-    json_data = load_json(json_path)
+    json_data, json_dict = load_json(json_path)
     meta = json_data['meta_info_3d'] 
     instances_map = frame_to_instances_map(json_data)
     cap = cv2.VideoCapture(mp4_path)
@@ -423,7 +423,7 @@ def main(mp4_path, json_path, start, end, create_new_df):
             print(f"{data} has been deleted.")
 
         df = new_df(json_data, json_data['meta_info_3d']['keypoint_id2name'], json_data['meta_info_3d']['lower_body_ids'])
-        df.to_csv(f"rows_df_test.csv", index = False)
+        df.to_csv(f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv", index = False)
         print(f"Created new dataset with {len(df)} rows. Columns = [{df.columns}]")
 
         # try:
