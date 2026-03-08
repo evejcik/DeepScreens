@@ -44,6 +44,11 @@ def load_json(json_path):
                 ' parent_dir': p.parent.name,
                 'full_path': p.parent
             }
+
+    print(f"DEBUG - json_path: {json_path}")
+    print(f"DEBUG - p.name: {p.name}")
+    print(f"DEBUG - p.parent.name: {p.parent.name}")
+    print(f"DEBUG - p_dict: {p_dict}")
     #returns dataset containing per frame, array of name instances
     with open(p, 'r') as j_file:
         return json.load(j_file), p_dict
