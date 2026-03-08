@@ -41,7 +41,7 @@ def load_json(json_path):
     p = Path(json_path)
     p_dict = {
                 'file_name': p.name,
-                ' parent_dir': p.parent.name,
+                'parent_dir': p.parent.name,
                 'full_path': p.parent
             }
 
