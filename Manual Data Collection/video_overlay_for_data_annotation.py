@@ -68,52 +68,6 @@ def frame_to_instances_map(data):
 
     return frame_map
 
-def old_df(data, keypoint_id2name, lower_body_ids):
-    #takes in json data
-    #returns dataframe with one row per frame per instance per joint
-
-    rows = []
-
-    for frame in data['instance_info']:
-        frame_id = int(frame['frame_id']) - 1
-        instances = frame.get('instances', [])
-
-        for instance_ind, instance in enumerate(instances):
-            track_id = instance.get('track_id', None)
-            keypoints = instance.get('keypoints', [])
-            confidences = instance.get('keypoint_scores', [])
-
-            for joint_id, keypoint in enumerate(keypoints):
-                if joint_id in data['meta_info_3d']['lower_body_ids']:
-                    joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
-                    x,y = keypoint[0], keypoint[1]
-                    confidence = confidences[joint_id] if confidences else None
-
-                    row = {
-                        'frame_id': frame_id,
-                        'instance_id': instance_ind,
-                        'track_id': track_id,
-                        'joint_id': joint_id,
-                        'joint_name': joint_name,
-                        
-                        # Manual Columns Below
-                        'visibility_category': None,
-                        'occlusion_severity': None,
-                        'occlusion_reason': None,
-                        'temporal_pattern': None,
-                        'annotator_confidence': None,
-                        'reason_for_low_confidence': None,
-                        'valid': None,
-                        'notes': None,
-                        
-                        #for later analysis
-                        'x': x,
-                        'y': y,
-                        'mmpose_confidence': confidence,
-                    }
-                    rows.append(row)
-    df = pd.DataFrame(rows)
-    return df
 
 def keypoints2D(instance):
     kps = np.array(instance['keypoints']) #gets the list of points of hwere the keypoints are at this one instance
@@ -429,7 +383,8 @@ def main(mp4_path, json_path, start, end, create_new_df):
 
         df = new_df(json_data, json_data['meta_info_3d']['keypoint_id2name'], json_data['meta_info_3d']['lower_body_ids'])
         df.to_csv(f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv", index = False)
-        print(f"Created new dataset with {len(df)} rows. Columns = [{df.columns}]")
+        df_name = f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv"
+        print(f"Created new dataset {df_name} with {len(df)} rows. Columns = [{df.columns}]")
 
         # try:
         #     sheet_id = push_dataframe_to_google_sheets(
