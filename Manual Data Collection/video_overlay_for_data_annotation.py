@@ -182,6 +182,8 @@ def new_df(data, keypoint_id2name, lower_body_ids):
     frame_count = 0
     instance_count = 0
     joint_count = 0
+
+    seen_keys = set()
     
     for frame in data['instance_info']:
         frame_id = int(frame['frame_id']) - 1
@@ -193,6 +195,12 @@ def new_df(data, keypoint_id2name, lower_body_ids):
             track_id = instance.get('track_id', None)
             keypoints = instance.get('keypoints', [])
             confidences = instance.get('keypoint_scores', [])
+
+            key = (frame_id, instance_ind, track_id)
+
+            if key in seen_keys:
+                print(f"DUPLICATE: frame_id={frame_id}, instance_id={instance_ind}, track_id={track_id}")
+            seen_keys.add(key)
             
             for joint_id, keypoint in enumerate(keypoints):
                 if joint_id in data['meta_info_3d']['lower_body_ids']:
@@ -352,72 +360,59 @@ def push_dataframe_to_google_sheets(df, spreadsheet_name, json_keyfile_path):
     return spreadsheet.id
 
 
-def main(mp4_path, json_path, start, end, create_new_df):
-   
-    # ap.add_argument("--output_dir", required = True)
-    # credentials_path = Path(__file__).parent / "Google Cloud Credentials" / "credentials.json"
+def main(mp4_path, json_path, start, end, create_new_df, video_nobbox):
     credentials_path = Path('Google Cloud Credentials/credentials.json')
-
     json_data, json_dict = load_json(json_path)
     meta = json_data['meta_info_3d'] 
     instances_map = frame_to_instances_map(json_data)
     cap = cv2.VideoCapture(mp4_path)
-
+    
+    cap_nobbox = None  # Initialize as None
+    if video_nobbox is not None:
+        cap_nobbox = cv2.VideoCapture(video_nobbox)
+    
     video_shape = [int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-               int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))]
+                   int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))]
     
     frame_id = 0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-
     if end < 0:
         end = total - 1
-
     data = "rows_df.csv"
-
-    if create_new_df == 1: ##MAKING NEW DATASET START
+    if create_new_df == 1:
         rows = []
-
         if os.path.exists(data):
             os.remove(data)
             print(f"{data} has been deleted.")
-
         df = new_df(json_data, json_data['meta_info_3d']['keypoint_id2name'], json_data['meta_info_3d']['lower_body_ids'])
-        df.to_csv(f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv", index = False)
+        df.to_csv(f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv", index=False)
         df_name = f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv"
         print(f"Created new dataset {df_name} with {len(df)} rows. Columns = [{df.columns}]")
-
-        # try:
-        #     sheet_id = push_dataframe_to_google_sheets(
-        #         df,
-        #         spreadsheet_name="DeepScreens_Annotation",
-        #         json_keyfile_path=str(credentials_path)
-        #     )
-        # except Exception as e:
-        #     print(f"⚠ Could not push to Google Sheets: {e}")
-        #     print("Continuing with CSV only...")
         create_new_df = 0
-            
-    ##MAKING NEW DATASET END
-
     
     cv2.namedWindow("overlay", cv2.WINDOW_NORMAL)
-    if start == None:
+    if start is None:
         frame_id = 0
-    else: frame_id = start
-    # frame_id = max(start, start_frame)
+    else:
+        frame_id = start
+    
     while True:
-        
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
-
+        
         if frame_id > end:
             break
-
+        
         ok, frame = cap.read()
         if not ok:
             break
-
+        
+        # Read second video frame if available
+        frame_nobbox = None
+        if cap_nobbox is not None:
+            cap_nobbox.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
+            ok_nobbox, frame_nobbox = cap_nobbox.read()
+        
         instances = instances_map.get(frame_id, [])
-
         cv2.putText(
             frame,
             f"Frame: {frame_id}  Instances: {len(instances)}",
@@ -428,46 +423,37 @@ def main(mp4_path, json_path, start, end, create_new_df):
             2,
             cv2.LINE_AA
         )
-
         
         for instance_ind, instance in enumerate(instances):
             track_id = instance.get('track_id', None)
-
-            raw_bbox = instance['bbox']                # <-- raw JSON box (green)
+            raw_bbox = instance['bbox']
             vis_bbox = visualiser_bbox_from_json(
                 raw_bbox,
-                meta=meta,               # 2‑D meta (may contain stats_info)
-                video_shape=video_shape) # fallback geometry when stats_info missing
+                meta=meta,
+                video_shape=video_shape)
             label = f"Instance: {instance_ind}" if track_id is None else f"Frame: {frame_id}, Instance: {instance_ind} out of {len(instances) - 1} Track Id: {track_id}"
             draw_bbox_and_label(frame, instance=instance, instance_ind=instance_ind, label=label)
-            
-            # --- OPTIONAL: draw the visualiser‑style bbox in yellow ---
-            def draw_box(img, bbox, colour, thickness=2):
-                h, w = img.shape[:2]
-                x1, y1, x2, y2 = map(int, bbox)
-                x1 = max(0, min(w-1, x1))
-                y1 = max(0, min(h-1, y1))
-                x2 = max(0, min(w-1, x2))
-                y2 = max(0, min(h-1, y2))
-                cv2.rectangle(img, (x1, y1), (x2, y2), colour, thickness)
-
-            
-
-        cv2.imshow("overlay", frame)
-
+        
+        # Concatenate or display single frame
+        if frame_nobbox is not None:
+            display_frame = cv2.vconcat([frame, frame_nobbox])
+        else:
+            display_frame = frame
+        
+        cv2.imshow("overlay", display_frame)
         key = cv2.waitKeyEx(0)
+        
         if key == ord("q"):
             break
         if key == ord(" "):
-            frame_id += 1
+            frame_id += 1  # Fixed: was concat_frame += 1
             continue
-        # elif key == 81 or key == 2555904:
         elif key == ord('a'):
-            frame_id = max(0, frame_id - 1)
-
+            frame_id = max(0, frame_id - 1)  # Fixed: was concat_frame = max(...)
     
     cv2.destroyAllWindows()
-    
+    if cap_nobbox is not None:
+        cap_nobbox.release()
 
 
 if __name__ == "__main__":
@@ -478,7 +464,8 @@ if __name__ == "__main__":
     ap.add_argument("--end", type = int)
     ap.add_argument("--create_new_df", type = int)
     ap.add_argument("--start", type = int)
+    ap.add_argument("--video_nobbox", default = None)
 
     args = ap.parse_args()
-    main(args.mp4, args.json, args.start, args.end, args.create_new_df)
+    main(args.mp4, args.json, args.start, args.end, args.create_new_df, args.video_nobbox)
 
