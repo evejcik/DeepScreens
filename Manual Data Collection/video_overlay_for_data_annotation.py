@@ -359,6 +359,11 @@ def push_dataframe_to_google_sheets(df, spreadsheet_name, json_keyfile_path):
     
     return spreadsheet.id
 
+def resize_frame_to_match(frame1, frame2):
+    """Resize frame2 to match frame1's dimensions"""
+    if frame1.shape != frame2.shape:
+        frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
+    return frame2
 
 def main(mp4_path, json_path, start, end, create_new_df, video_nobbox):
     credentials_path = Path('Google Cloud Credentials/credentials.json')
