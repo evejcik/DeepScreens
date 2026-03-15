@@ -13,8 +13,9 @@ import pandas as pd
 # The variance then serves the same purpose as the heat‑map’s spread.
 
 def min_max_scaler(confidence_vec): 
-    #input: vector of x,y confidence vector
+    #input: vector of confidence scores
     #output: normalized vector, between 0 and 1
+
     v_min = confidence_vec.min()
     v_max = confidence_vec.max()
     denom = v_max - v_min
@@ -25,6 +26,9 @@ def min_max_scaler(confidence_vec):
     
 
 def confidence_vec(df):
+    #input: tabular dataframe
+    #output: normalized x,y pairs in a vector of confidence scores
+
     x = df['x'].astype(float)
     y = df['y'].astype(float)
 
