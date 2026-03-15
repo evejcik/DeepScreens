@@ -6,6 +6,16 @@ import numpy as np
 import argparse
 import pandas as pd
 
+def confidence_vec(data_path):
+    confidenceX = data_path.loc['x']
+    confidenceY = data_path.loc[y]
+
+
+def main(data_path):
+    csv = pd.read_csv(Path(data_path))
+
+    confidence_vec(csv)
+
 if __name__ == "main":
     ap.argparse.ArgumentParser()
     ap.add_argument("data_path")
