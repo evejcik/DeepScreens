@@ -12,17 +12,24 @@ import pandas as pd
 # Add a variance head to your 2‑D model (predict a per‑joint log‑σ²) and train it with a negative‑log‑likelihood loss. 
 # The variance then serves the same purpose as the heat‑map’s spread.
 
+def min_max_scaler(vec):
+    v_min = vec.min()
+    v_max = vec.max()
+    denom = v_max - v_min
+    # if denom == 0:
+    
+    return vec - v_min / denom
+    
 
+def confidence_vec(df):
+    x = df['x'].astype(float)
+    y = df['y'].astype(float)
 
-def confidence_vec(data_path):
-    confidenceX = data_path.loc['x']
-    confidenceY = data_path.loc['y']
+    confidenceX = min_max_scalar(x)
+    confidenceY = min_max_scalar(y)
 
     c_i = list(zip(confidenceX, confidenceY))
 
-    for x,y in c_i:
-        scaled_x = (x - c_i[x].min()) / (c_i[x].max() - c_i[x].min())
-        scaled_y = (y - c_i[y].min()) / (c_i[y].max() - c_i[y].min())
     return c_i
 
 
