@@ -8,13 +8,18 @@ import pandas as pd
 
 def confidence_vec(data_path):
     confidenceX = data_path.loc['x']
-    confidenceY = data_path.loc[y]
+    confidenceY = data_path.loc['y']
+
+    c_i = list(zip(confidenceX, confidenceY))
+    return c_i
+
 
 
 def main(data_path):
     csv = pd.read_csv(Path(data_path))
 
-    confidence_vec(csv)
+   c_i = confidence_vec(csv)
+
 
 if __name__ == "main":
     ap.argparse.ArgumentParser()
