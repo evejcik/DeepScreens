@@ -41,19 +41,18 @@ def position_vec(df):
     x_norm = min_max_scalar(x)
     y_norm = min_max_scalar(y)
 
-    X = np.empty(2 * len(x_norm), dtype=np.float32) #normalized coordinates??
-    X[0::2] = x_norm #even spots are x
-    X[1::2] = y_norm #odd spots are y
+    X_tilde = np.empty(2 * len(x_norm), dtype=np.float32) #normalized coordinates??
+    X_tilde[0::2] = x_norm #even spots are x
+    X_tilde[1::2] = y_norm #odd spots are y
 
-    return X
+    return X_tilde
 
 def binary_map(confidence_vec, X_tilde, threshold):
     #input: confidence vector, size K, threshold
     #confidence_vec = confidences, size 17
     #X_tilde = ground truth, size 17 x 2 (x,y per joint)
     #output: C_b, another vector, size 2K, with whether or not the confidence is higher than threshold -> which joints are reliable, indicated in 1s and 0s
-    reliability_map = [float(x >= threshold) for x in confidence_vec]
-    mask = np.asarray(reliability_map, dtype=float)   # shape (K,)
+    mask = (np.asarray(confidence_vec, dtype=np.float32) >= threshold).astype(np.float32)  # (K,)
     C_b = np.repeat(mask, 2)           # shape (2*K,) #C_b
 
     X_tilde_masked = C_b.T * X_tilde #the coordinates have been masked now
@@ -63,7 +62,7 @@ def binary_map(confidence_vec, X_tilde, threshold):
 def main(data_path, threshold):
     csv = pd.read_csv(Path(data_path))
     
-    c_i = position_vec(csv)
+    X_tilde = position_vec(csv)
     C_b, X_hat = binary_map(csv['mmpose_co'], c_i, threshold)
     
 

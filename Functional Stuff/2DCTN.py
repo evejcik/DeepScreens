@@ -10,27 +10,27 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 
-from confidence_scores import X_tilde_masked, C_b
+from confidence_scores import min_max_scalar, position_vec, binary_map
 
 
-def loss(X_tilde_masked, C_b, df):
+def loss(X_tilde_masked, C_b, X_tilde, net):
     #input: X_tilde_masked = output from binary_map, C^b * X_tilde, size (2K, )
     #C_b = 1/0 binary map, also output from binary_map, size (2K, )
     #output: loss value, to be minimized
-    X = df['x']
+    X = X_tilde
 
     # Convert to torch tensors and add batch dimension
     X_masked_t = torch.from_numpy(X_tilde_masked).float().unsqueeze(0)   # (1, 2K)
     C_b_t      = torch.from_numpy(C_b).float().unsqueeze(0)       # (1, 2K)
-    X_gt_t     = torch.from_numpy(X_gt).float().unsqueeze(0)      # (1, 2K)
+    X_gt_t     = torch.from_numpy(X_tilde).float().unsqueeze(0)      # (1, 2K)
 
     X_hat = net(X_masked_t)    # (1, 2K)
-    diff = (X_hat * C_b) - X
+    diff = (X_hat * X) - C_b_t
     loss_val = torch.mean(diff.pow(2))
     return loss_val
 
 
-class Net(nn.Module):
+class Net(nn.Module): #1D CNN for temporal consistency
     def __init__(self):
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(3,6,5)
@@ -51,13 +51,22 @@ class Net(nn.Module):
 
 net = Net()
 
-def main(df, masked_joints):
-    loss(masked_joints)
+def main(data_path, masked_joints, net):
+    #X_tilde = [x_1, y_1, ..., x_K, y_K]
+    #X_masked_tilde = X_tilde * C_b
+    #
+    csv = pd.read_csv(Path(data_path))
+    
+    X_tilde = position_vec(csv)
+    C_b, X_hat = binary_map(csv['mmpose_co'], c_i, threshold)
+    loss(X_masked_tilde, df, X_tilde, net)
 
 
 if __name__ == main():
     ap.argparse.ArgumentParser()    
     ap.add_argument('df')
+    ap.add_argument("data_path")
+    ap.add_argument("threshold", type = int, default = 0.3) #as in cited paper
 
     args = ap.parse_args()
     main(df)
