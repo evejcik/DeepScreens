@@ -1,3 +1,6 @@
+# Y. Cheng, B. Yang, B. Wang, Y. Wending and R. Tan, "Occlusion-Aware Networks for 3D Human Pose Estimation in Video," 2019 IEEE/CVF International Conference on Computer Vision (ICCV), Seoul, Korea (South), 2019, pp. 723-732, doi: 10.1109/ICCV.2019.00081.
+# keywords: {Three-dimensional displays;Two dimensional displays;Pose estimation;Heating systems;Feeds;Training},
+
 import cv2
 import os
 from pathlib import Path
@@ -39,25 +42,28 @@ def position_vec(df):
 
     return c_i
 
-def binary_map(confidence_vec, threshold):
-    #input: confidence vector, position vector, threshold
-    #output: a third vector, with whether or not the confidence is higher than threshold -> which joints are reliable
-    reliability_map = list(map(lambda x: x >= threshold))
-    return reliability_map
+def binary_map(confidence_vec, position_vec, threshold):
+    #input: confidence vector, size K, threshold
+    #output: another vector, size 2K, with whether or not the confidence is higher than threshold -> which joints are reliable, indicated in 1s and 0s
+    reliability_map = [float(x >= threshold) for x in confidence_vec]
+    mask = np.asarray(reliability_map, dtype=float)   # shape (K,)
+    mask_xy = np.repeat(mask, 2)           # shape (2*K,)
 
+    masked_vec = mask_xy * position_vec
+    return masked_vec
+
+    
 def main(data_path, threshold):
     csv = pd.read_csv(Path(data_path))
     
     c_i = position_vec(csv)
-    binary_map(csv['mmpose_co'], c_i, threshold)
-
-
-
+    masked_joints = binary_map(csv['mmpose_co'], c_i, threshold)
+    
 
 if __name__ == "main":
     ap.argparse.ArgumentParser()
     ap.add_argument("data_path")
-    ap.add_argument("threshold", type = int, default = 0.3)
+    ap.add_argument("threshold", type = int, default = 0.3) #as in cited paper
 
     args = ap.parse_args()
     main(data_path, threshold)
