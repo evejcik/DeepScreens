@@ -15,7 +15,7 @@ def loss(masked_joints):
     #input: masked joint vector (length 2K)
     #output: loss value, to be minimized
 
-    masked_joints.T * Net(masked_joints.T*)
+    masked_joints.T * Net(masked_joints *)
 
 
 class Net(nn.Module):

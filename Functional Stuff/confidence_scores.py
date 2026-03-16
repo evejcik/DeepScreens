@@ -49,7 +49,7 @@ def binary_map(confidence_vec, position_vec, threshold):
     mask = np.asarray(reliability_map, dtype=float)   # shape (K,)
     mask_xy = np.repeat(mask, 2)           # shape (2*K,)
 
-    masked_vec = mask_xy * position_vec
+    masked_vec = mask_xy.T * position_vec
     return masked_vec
 
     
