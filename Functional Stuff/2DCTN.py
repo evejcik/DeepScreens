@@ -10,12 +10,16 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 
+from confidence_scores import masked_joints, c_i
+
 
 def loss(masked_joints, df):
     #input: masked joint vector (length 2K)
     #output: loss value, to be minimized
     X = df['x']
-    masked_joints.T * Net(masked_joints * X)
+    X_tilde = masked_joints.reshape(-1) #flatten in row-major order
+    C_b = 
+    
 
 
 class Net(nn.Module):
@@ -39,7 +43,8 @@ class Net(nn.Module):
 
 net = Net()
 
-def main(df):
+def main(df, masked_joints):
+    loss(masked_joints)
 
 
 if __name__ == main():
