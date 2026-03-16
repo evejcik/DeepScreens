@@ -15,17 +15,20 @@ import pandas as pd
 # Add a variance head to your 2‑D model (predict a per‑joint log‑σ²) and train it with a negative‑log‑likelihood loss. 
 # The variance then serves the same purpose as the heat‑map’s spread.
 
-def min_max_scaler(confidence_vec): 
+def min_max_scalar(confidence_vec): 
     #input: vector of confidence scores
     #output: normalized vector, between 0 and 1
 
-    v_min = confidence_vec.min()
-    v_max = confidence_vec.max()
+    # Convert to a NumPy array of floats (works for both Series and ndarray)
+    conf = np.asarray(confidence_vec, dtype = np.float32)
+
+    v_min = conf.min()
+    v_max = conf.max()
     denom = v_max - v_min
-    if denom == 0:
-        return pd.Series(0.0, index=series.index)
+    if denom == 0: #avoid dividing by 0 error
+        return np.zeros_like(conf, dtype=np.float32)
     
-    return (confidence_vec - v_min) / denom
+    return (conf - v_min) / denom
     
 
 def position_vec(df):
@@ -35,29 +38,33 @@ def position_vec(df):
     x = df['x'].astype(float)
     y = df['y'].astype(float)
 
-    X = min_max_scalar(pd.Series(x))
-    Y = min_max_scalar(pd.Series(y))
+    x_norm = min_max_scalar(x)
+    y_norm = min_max_scalar(y)
 
-    c_i = list(zip(X, Y))
+    X = np.empty(2 * len(x_norm), dtype=np.float32) #normalized coordinates??
+    X[0::2] = x_norm #even spots are x
+    X[1::2] = y_norm #odd spots are y
 
-    return c_i
+    return X
 
 def binary_map(confidence_vec, position_vec, threshold):
     #input: confidence vector, size K, threshold
-    #output: another vector, size 2K, with whether or not the confidence is higher than threshold -> which joints are reliable, indicated in 1s and 0s
+    #confidence_vec = confidences, size 17
+    #position_vec = ground truth, size 17 x 2 (x,y per joint)
+    #output: C_b, another vector, size 2K, with whether or not the confidence is higher than threshold -> which joints are reliable, indicated in 1s and 0s
     reliability_map = [float(x >= threshold) for x in confidence_vec]
     mask = np.asarray(reliability_map, dtype=float)   # shape (K,)
-    mask_xy = np.repeat(mask, 2)           # shape (2*K,)
+    C_b = np.repeat(mask, 2)           # shape (2*K,) #C_b
 
-    masked_vec = mask_xy.T * position_vec
-    return masked_vec
+    X_hat = C_b.T * position_vec #the coordinates have been masked now
+    return C_b, X_hat
 
     
 def main(data_path, threshold):
     csv = pd.read_csv(Path(data_path))
     
     c_i = position_vec(csv)
-    masked_joints = binary_map(csv['mmpose_co'], c_i, threshold)
+    C_b, X_hat = binary_map(csv['mmpose_co'], c_i, threshold)
     
 
 if __name__ == "main":

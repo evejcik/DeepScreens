@@ -18,7 +18,7 @@ def loss(masked_joints, df):
     #output: loss value, to be minimized
     X = df['x']
     X_tilde = masked_joints.reshape(-1) #flatten in row-major order
-    C_b = 
+    C_b = #size 2,K
     
 
 
