@@ -47,17 +47,17 @@ def position_vec(df):
 
     return X
 
-def binary_map(confidence_vec, position_vec, threshold):
+def binary_map(confidence_vec, X_tilde, threshold):
     #input: confidence vector, size K, threshold
     #confidence_vec = confidences, size 17
-    #position_vec = ground truth, size 17 x 2 (x,y per joint)
+    #X_tilde = ground truth, size 17 x 2 (x,y per joint)
     #output: C_b, another vector, size 2K, with whether or not the confidence is higher than threshold -> which joints are reliable, indicated in 1s and 0s
     reliability_map = [float(x >= threshold) for x in confidence_vec]
     mask = np.asarray(reliability_map, dtype=float)   # shape (K,)
     C_b = np.repeat(mask, 2)           # shape (2*K,) #C_b
 
-    X_hat = C_b.T * position_vec #the coordinates have been masked now
-    return C_b, X_hat
+    X_tilde_masked = C_b.T * X_tilde #the coordinates have been masked now
+    return C_b, X_tilde_masked
 
     
 def main(data_path, threshold):

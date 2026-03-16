@@ -10,18 +10,24 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 
-from confidence_scores import X_hat, C_b
+from confidence_scores import X_tilde_masked, C_b
 
 
-def loss(X_hat, C_b, df):
-    #input: masked joint vector (length 2K)
+def loss(X_tilde_masked, C_b, df):
+    #input: X_tilde_masked = output from binary_map, C^b * X_tilde, size (2K, )
+    #C_b = 1/0 binary map, also output from binary_map, size (2K, )
     #output: loss value, to be minimized
     X = df['x']
-    masked_coords = X_hat.reshape(-1)
-    term_1 = Net.forward(masked_coords)    
-    loss = C_b * (term_1 - X)
-    loss_squared = math.pow(loss, 2)
-    return loss_squaredx
+
+    # Convert to torch tensors and add batch dimension
+    X_masked_t = torch.from_numpy(X_tilde_masked).float().unsqueeze(0)   # (1, 2K)
+    C_b_t      = torch.from_numpy(C_b).float().unsqueeze(0)       # (1, 2K)
+    X_gt_t     = torch.from_numpy(X_gt).float().unsqueeze(0)      # (1, 2K)
+
+    X_hat = net(X_masked_t)    # (1, 2K)
+    diff = (X_hat * C_b) - X
+    loss_val = torch.mean(diff.pow(2))
+    return loss_val
 
 
 class Net(nn.Module):
