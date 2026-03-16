@@ -11,11 +11,11 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 
 
-def loss(masked_joints):
+def loss(masked_joints, df):
     #input: masked joint vector (length 2K)
     #output: loss value, to be minimized
-
-    masked_joints.T * Net(masked_joints *)
+    X = df['x']
+    masked_joints.T * Net(masked_joints * X)
 
 
 class Net(nn.Module):
@@ -38,3 +38,13 @@ class Net(nn.Module):
 
 
 net = Net()
+
+def main(df):
+
+
+if __name__ == main():
+    ap.argparse.ArgumentParser()    
+    ap.add_argument('df')
+
+    args = ap.parse_args()
+    main(df)
