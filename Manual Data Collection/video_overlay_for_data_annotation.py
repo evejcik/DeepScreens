@@ -441,6 +441,8 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox):
         
         # Concatenate or display single frame
         if frame_nobbox is not None:
+            # Resize frame_nobbox to match frame dimensions
+            frame_nobbox = resize_frame_to_match(frame, frame_nobbox)
             display_frame = cv2.vconcat([frame, frame_nobbox])
         else:
             display_frame = frame

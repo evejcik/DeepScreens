@@ -25,31 +25,39 @@ def min_max_scaler(confidence_vec):
     return (confidence_vec - v_min) / denom
     
 
-def confidence_vec(df):
+def position_vec(df):
     #input: tabular dataframe
     #output: normalized x,y pairs in a vector of confidence scores
 
     x = df['x'].astype(float)
     y = df['y'].astype(float)
 
-    confidenceX = min_max_scalar(x)
-    confidenceY = min_max_scalar(y)
+    X = min_max_scalar(pd.Series(x))
+    Y = min_max_scalar(pd.Series(y))
 
-    c_i = pd.Series(zip(confidenceX, confidenceY))
+    c_i = list(zip(X, Y))
 
     return c_i
 
+def binary_map(confidence_vec, threshold):
+    #input: confidence vector, position vector, threshold
+    #output: a third vector, with whether or not the confidence is higher than threshold -> which joints are reliable
+    reliability_map = list(map(lambda x: x >= threshold))
+    return reliability_map
 
-
-def main(data_path):
+def main(data_path, threshold):
     csv = pd.read_csv(Path(data_path))
+    
+    c_i = position_vec(csv)
+    binary_map(csv['mmpose_co'], c_i, threshold)
 
-   c_i = confidence_vec(csv)
+
 
 
 if __name__ == "main":
     ap.argparse.ArgumentParser()
     ap.add_argument("data_path")
+    ap.add_argument("threshold", type = int, default = 0.3)
 
     args = ap.parse_args()
-    main(data_path)
+    main(data_path, threshold)
