@@ -18,10 +18,15 @@ def relative_confidences(scores, confidence_method): #as in, what do you do when
         #widen spread of confidence scores
         scores = np.log(scores + 1e-6)
     elif confidence_method == 'mse': #use MSE instead of MLE
+        scipy.stats(method = 'mse')
     elif confidence_method == 'log_regression': #need to use better model to fit tiny variance, so model reverse -> p(visible | confidence)
     elif confidence_method == 'relative_confidence': #compare confidence score to mean body confidence score
-
     return scores
+
+def mse(scores):
+    dist = stats.nbinom # nbinom also knows that the shape p must be a value between 0 and 1.
+    mse_params = stats.fit(dist, scores, method = 'mse')
+    return mse_params
 
 
 def beta_per_joint(df, joint, confidence_method):
@@ -67,8 +72,10 @@ def beta_per_joint(df, joint, confidence_method):
         #     print(f"{joint} ({visibility}): skipped (near-constant)")
         #     continue
 
-
-        a, b, loc, scale = beta.fit(scores, floc = floc, fscale = fscale)
+        if 'mse' not in confidence_method:
+            a, b, loc, scale = beta.fit(scores, floc = floc, fscale = fscale)
+        else:
+            a, b, loc, scale = mse(scores) #?
 
         results[visibility] = {'a': a, 'b': b, 'samples': len(scores), 'mean': scores.mean()}
         print(f"{joint} ({visibility}): a = {a:.2f}, b = {b:.2f}, n = {len(scores)}, mean = {scores.mean():.3f}")
