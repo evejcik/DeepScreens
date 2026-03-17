@@ -8,14 +8,17 @@ def main(df):
     df = pd.read_csv(df)
     scores = df['mmpose_confidence']
 
+    print("\n--- dtype of visibility column ---------------------------------")
+    print(df['visibility_category'].dtype)
+
     scores_mean = np.mean(scores)
     scores_std = np.std(scores)
 
     percentage_groups = {}
 
     total = len(df)
-    visible_count = (df['visibility_category'] == 1).sum()
-    not_visible_count = ((df['visibility_category'] == 2) | (df['visibility_category'] == 3)).sum()
+    visible_count = (df['visibility_category'].astype(float) == 1).sum()
+    not_visible_count = ((df['visibility_category'].astype(float) == 2) | (df['visibility_category'].astype(float) == 3)).sum()
     pct_visible = round(100 * visible_count/total, 2)
     pct_not_visible = round(100 * not_visible_count/total, 2)
 
