@@ -32,6 +32,13 @@ def beta_per_joint(df, joint):
         visibility = 'visible' if val == 1 else 'not_visible'
         scores = joint_data[joint_data['is_visible'] == val]['mmpose_confidence'].values
         scores = np.clip(scores, 0.001, 0.999)
+        if len(scores) < 2:
+            print(f"{joint} ({visibility}): skipped (n={len(scores)})")
+            continue
+
+        if np.var(scores) < 1e-6:
+            print(f"{joint} ({visibility}): skipped (near-constant)")
+            continue
         a, b, loc, scale = beta.fit(scores, floc = floc, fscale = fscale)
 
         results[visibility] = {'a': a, 'b': b, 'samples': len(scores), 'mean': scores.mean()}
