@@ -51,11 +51,13 @@ def save_beta_parameters(betas):
 
 
 def main(df):
-    save_beta_parameters(fit_all_joints(df))
+    betas = fit_all_joints(df)
+    save_beta_parameters(betas)
+    print("done!")
 
 if __name__ == "main":
     ap.argParse.ArgumentParser()
-    ap.add_argument('df')
+    ap.add_argument("--df")
 
     args = ap.parse_args()
     main(Path(args.df))
