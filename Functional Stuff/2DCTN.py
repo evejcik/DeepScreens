@@ -75,4 +75,4 @@ if __name__ == main():
     ap.add_argument("threshold", type = int, default = 0.3) #as in cited paper
 
     args = ap.parse_args()
-    main(df)
+    main(args.df)

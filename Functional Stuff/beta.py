@@ -57,8 +57,8 @@ if __name__ == "main":
     ap.argParse.ArgumentParser()
     ap.add_argument('df')
 
-    ap.parse_args()
-    main(df)
+    args = ap.parse_args()
+    main(Path(args.df))
 
 
 
