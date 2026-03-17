@@ -11,9 +11,20 @@ import pandas as pd
 import pickle #to save parameters for later
 from pathlib import Path
 
+from sklearn.linear_model import LogisticRegression
+
+def relative_confidences(scores, confidence_method):
+    if confidence_method == 'transform':
+        #widen spread of confidence scores
+        scores = np.log(scores + 1e-6)
+    elif confidence_method == 'mse': #use MSE instead of MLE
+    elif confidence_method == 'log_regression': #need to use better model to fit tiny variance, so model reverse -> p(visible | confidence)
+    elif confidence_method == 'relative_confidence': #compare confidence score to mean body confidence score
+
+    return scores
 
 
-def beta_per_joint(df, joint):
+def beta_per_joint(df, joint, confidence_method):
     #input: dataset and 1 joint name
     #output: dictionary with fitted parameters
 
@@ -32,13 +43,31 @@ def beta_per_joint(df, joint):
         visibility = 'visible' if val == 1 else 'not_visible'
         scores = joint_data[joint_data['is_visible'] == val]['mmpose_confidence'].values
         scores = np.clip(scores, 0.001, 0.999)
-        if len(scores) < 2:
-            print(f"{joint} ({visibility}): skipped (n={len(scores)})")
-            continue
+        scores = transform_confidences(scores, confidence_method)
 
-        if np.var(scores) < 1e-6:
-            print(f"{joint} ({visibility}): skipped (near-constant)")
-            continue
+        ##GUARDRAILS:
+        #sometimes, a joint never has any visibility throughout the whole video.
+        #when this happens, scores = [], empty. this will cause errors later down the road, i.e., when calculating mean, etc.
+        #in order to accomodate this...
+
+        ##SIMILARLY, if there is near-zero variance in our beta distribution...
+        #then the solver tries very big betas (b) and very big alphas (a)
+        #so... 
+        # Numerically this means that: 
+        # gradients become unstable
+        # the likelihood surface becomes flat/ill-conditioned
+        # solver stops: “not making good progress”
+        #this means that the "best fit" distribution would look like a vertical spike at 1
+
+        # if len(scores) < 2:
+        #     print(f"{joint} ({visibility}): skipped (n={len(scores)})")
+        #     continue
+
+        # if np.var(scores) < 1e-6:
+        #     print(f"{joint} ({visibility}): skipped (near-constant)")
+        #     continue
+
+
         a, b, loc, scale = beta.fit(scores, floc = floc, fscale = fscale)
 
         results[visibility] = {'a': a, 'b': b, 'samples': len(scores), 'mean': scores.mean()}
@@ -58,17 +87,17 @@ def save_beta_parameters(betas):
         pickle.dump(betas, f)
     print(f"Saved fitted Beta parameters to fitted_betas.pkl")
 
-def main(df):
-    betas = fit_all_joints(pd.read_csv(df))
-    save_beta_parameters(betas)
+def main(df, confidence_method):
+    save_beta_parameters(fit_all_joints(pd.read_csv(df), confidence_method))
     print("done!")
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--df")
+    ap.add_argument("--confidence_method")
 
     args = ap.parse_args()
-    main(args.df)
+    main(args.df, args.confidence_method)
 
 # if __name__ == "__main__":
 #     ap = argparse.ArgumentParser()
