@@ -57,7 +57,7 @@ class Net(nn.Module): #1D CNN for temporal consistency
 
 net = Net()
 
-def main(data_path, masked_joints, net):
+def main(df, masked_joints, net):
     #X_tilde = [x_1, y_1, ..., x_K, y_K]
     #X_masked_tilde = X_tilde * C_b
     #
@@ -70,9 +70,8 @@ def main(data_path, masked_joints, net):
 
 if __name__ == main():
     ap.argparse.ArgumentParser()    
-    ap.add_argument('df')
-    ap.add_argument("data_path")
-    ap.add_argument("threshold", type = int, default = 0.3) #as in cited paper
+    ap.add_argument("--df")
+    ap.add_argument("--threshold", type = int, default = 0.3) #as in cited paper
 
     args = ap.parse_args()
     main(args.df)
