@@ -13,7 +13,7 @@ from pathlib import Path
 
 from sklearn.linear_model import LogisticRegression
 
-def relative_confidences(scores, confidence_method):
+def relative_confidences(scores, confidence_method): #as in, what do you do when all the confidences are extremely high and extremely close to eachother...
     if confidence_method == 'transform':
         #widen spread of confidence scores
         scores = np.log(scores + 1e-6)
