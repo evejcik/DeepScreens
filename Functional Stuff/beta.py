@@ -21,5 +21,7 @@ def beta_per_joint(df, joint):
     fscale = 1 #this fits the distribution to standard [0,1]
     #this works since we are working with probabilities (the confidences) bounded by 0 and 1, so we don't have to bring in unbounded MSE calculations for now
     #so now only alpha and beta are estimated
-    scores = 
+    for val in [0,1]:
+        visibility = val
+        scores = joint_data[joint_data['is_visible'] == val]['mmpose_confidence']
     alpha, beta, loc, scale = beta.fit(df, floc = floc, fscale = fscale)
