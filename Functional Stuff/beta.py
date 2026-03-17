@@ -5,16 +5,19 @@
 #we can interpret the beta distribution's 2 parameters cleanly: the number of successes vs the number of failures -> the number of times the joint is visible vs not
 
 from scipy.stats import beta
-import argparse
+import argparse 
 import numpy as np
 import pandas as pd
 import pickle #to save parameters for later
 from pathlib import Path
 
 
+
 def beta_per_joint(df, joint):
     #input: dataset and 1 joint name
     #output: dictionary with fitted parameters
+
+    df = Path(df)
 
     joint_data = df[df['joint_name'] == joint].copy()
     joint_data['is_visible'] = (joint_data['visibility'] == 1).astype(int)
@@ -40,7 +43,7 @@ def beta_per_joint(df, joint):
 
 def fit_all_joints(df):
     betas = {}
-    for joint in df['joint_name'].unique():
+    for joint in pd.Series(df['joint_name']).unique():
         betas[joint] = beta_per_joint(df, joint)
     return betas
 
@@ -49,18 +52,29 @@ def save_beta_parameters(betas):
         pickle.dump(betas, f)
     print(f"Saved fitted Beta parameters to fitted_betas.pkl")
 
-
 def main(df):
     betas = fit_all_joints(df)
     save_beta_parameters(betas)
     print("done!")
 
-if __name__ == "main":
-    ap.argParse.ArgumentParser()
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
     ap.add_argument("--df")
 
     args = ap.parse_args()
-    main(Path(args.df))
+    main(args.df)
 
+# if __name__ == "__main__":
+#     ap = argparse.ArgumentParser()
+    
+#     ap.add_argument("--json", required = True)
+#     ap.add_argument("--mp4", required = True)
+#     ap.add_argument("--end", type = int)
+#     ap.add_argument("--create_new_df", type = int)
+#     ap.add_argument("--start", type = int)
+#     ap.add_argument("--video_nobbox", default = None)
+
+#     args = ap.parse_args()
+#     main(args.mp4, args.json, args.start, args.end, args.create_new_df, args.video_nobbox)
 
 
