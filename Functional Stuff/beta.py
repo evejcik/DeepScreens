@@ -72,6 +72,17 @@ def beta_per_joint(df, joint, confidence_method):
         #     print(f"{joint} ({visibility}): skipped (near-constant)")
         #     continue
 
+
+        #log spread scores
+        if 'log_spread' not in confidence_method:
+            scores = scores
+        else:
+            log_transformed_scores = log_transform(scores)
+
+        #relative confidence -> comparing score to mean score of whole figure
+        if 'relative' not in confidence_method:
+
+        #mse as opposed to mle
         if 'mse' not in confidence_method:
             a, b, loc, scale = beta.fit(scores, floc = floc, fscale = fscale)
         else:
