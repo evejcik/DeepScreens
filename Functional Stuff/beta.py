@@ -28,3 +28,6 @@ def beta_per_joint(df, joint):
         alpha, beta, loc, scale = beta.fit(scores, floc = floc, fscale = fscale)
 
         results[visibility] = {'a': alpha, 'b': beta, 'samples': len(scores), 'mean': scores.mean()}
+        print(f"{joint_name} ({vis_label}): a = {a:.2f}, b = {b:.2f}, n = {len(scores)}, mean = {scores.mean():.3f}")
+
+
