@@ -17,10 +17,8 @@ def beta_per_joint(df, joint):
     #input: dataset and 1 joint name
     #output: dictionary with fitted parameters
 
-    df = Path(df)
-
     joint_data = df[df['joint_name'] == joint].copy()
-    joint_data['is_visible'] = (joint_data['visibility'] == 1).astype(int)
+    joint_data['is_visible'] = (joint_data['visibility_category'] == 1).astype(int)
 
     results = {}
 
@@ -34,10 +32,10 @@ def beta_per_joint(df, joint):
         visibility = 'visible' if val == 1 else 'not_visible'
         scores = joint_data[joint_data['is_visible'] == val]['mmpose_confidence'].values
         scores = np.clip(scores, 0.001, 0.999)
-        alpha, beta, loc, scale = beta.fit(scores, floc = floc, fscale = fscale)
+        a, b, loc, scale = beta.fit(scores, floc = floc, fscale = fscale)
 
-        results[visibility] = {'a': alpha, 'b': beta, 'samples': len(scores), 'mean': scores.mean()}
-        print(f"{joint_name} ({vis_label}): a = {a:.2f}, b = {b:.2f}, n = {len(scores)}, mean = {scores.mean():.3f}")
+        results[visibility] = {'a': a, 'b': b, 'samples': len(scores), 'mean': scores.mean()}
+        print(f"{joint} ({visibility}): a = {a:.2f}, b = {b:.2f}, n = {len(scores)}, mean = {scores.mean():.3f}")
 
     return results
 
@@ -45,6 +43,7 @@ def fit_all_joints(df):
     betas = {}
     for joint in pd.Series(df['joint_name']).unique():
         betas[joint] = beta_per_joint(df, joint)
+        
     return betas
 
 def save_beta_parameters(betas):
@@ -53,7 +52,7 @@ def save_beta_parameters(betas):
     print(f"Saved fitted Beta parameters to fitted_betas.pkl")
 
 def main(df):
-    betas = fit_all_joints(df)
+    betas = fit_all_joints(pd.read_csv(df))
     save_beta_parameters(betas)
     print("done!")
 
