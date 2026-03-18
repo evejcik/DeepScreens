@@ -58,7 +58,7 @@ def jitter(scores, epsilon = float(1e-6)): #data now has non zero variance. A ze
     #is trying to fit the best alpha and beta to the distribution, beta goes to 0 and alpha goes to infinity -> not good for trying to find a reasonal 
     #distribution of probabilities for the confidence scores
     scores = np.clip(epsilon, 1 - epsilon)
-    jittered_scores = scores + epsilon * N(0,1)
+    jittered_scores = scores + epsilon * np.random.default_rng().normal()
 
     clipped_jittered_scores = np.clip(jittered_scores, epsilon, 1 - epsilon)
 
