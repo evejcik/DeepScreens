@@ -10,7 +10,6 @@ def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0,
     # i.e., a gamma or hierarchical bayes distrbution
     #as opposed to the initial exponential distribution
 
-
     c = scores
     c = np.clip(c, eps, 1.0 - eps)
     N = len(scores)
@@ -33,7 +32,6 @@ def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0,
     final = negative_log_likelihood - log_prior
 
     return float(final)
-
 
 ## MAP with weak Beta prior
 
