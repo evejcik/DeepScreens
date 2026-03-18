@@ -4,6 +4,21 @@ import argparse
 from scipy.special import betaln   # log of the beta function B(α,β)
 
 
+def moments(scores): #quick, closed‑form way to pick α and β just from the sample mean and sample variance of the scores.
+    #uses: as an initial guess for a more refined optimizer (MLE or MAP),
+    # as a fallback when the optimizer fails, and
+    # as a simple sanity check (does the fitted distribution even look plausible?).
+
+    sample_mean = np.mean(scores) #first moment
+    sample_var = np.var(scores) #second spread out moment
+    k = sample_mean * (1 - sample_mean) / sample_var
+
+    alpha_mom = sample_mean * k #mom = Method of Moments
+    beta_mom = (1 - sample_mean) * k
+    return sample_mean, sample_var, k, alpha_mom, beta_mom
+
+
+
 ##negative log posterior J(alpha, beta)
 def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0, beta_prior = 2.0): 
     ##FOR OPTIMIZATION'S SAKE: consider placing a different distribution over alpha and beta parameters 
