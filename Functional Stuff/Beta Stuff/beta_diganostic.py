@@ -46,7 +46,7 @@ def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0,
     ##we get this part by taking the log of the exponential distribution on alpha and beta -> if we change this, we change it here
     prior_penalty = (alpha - alpha_prior) + (beta - beta_prior) #right now, set to 2 and 2 to keep prior weak 
 
-    final = negative_log_likelihood - prior_penalty
+    final = negative_log_likelihood + prior_penalty
 
     return float(final)
 
@@ -71,7 +71,7 @@ def jitter(scores, epsilon = float(1e-6)): #data now has non zero variance. A ze
 ## Simple Binning
 
 
-def beta_fit(scores, alpha0, beta0):
+def beta_fit(scores):
     mu, var, k, alpha0, beta0 = moments(scores)
     bounds = [(1e-3, None), (1e-3, None)] #parameters stay strictly positive!
     x0 = np.array([alpha0, beta0])
@@ -88,13 +88,13 @@ def beta_fit(scores, alpha0, beta0):
         return float(res.x[0]), float(res.x[1]), True
     else:
         # optimiser failed → fall back to MoM
-        return float(alpha_start), float(beta_start), False
+        return float(alpha0), float(beta0), False
 
 
 def main(data):
-    data = pd.read_csv(data)
+    df = pd.read_csv(data)
     results = {}
-    joints = data["joint_name"].unique()
+    joints = df["joint_name"].unique()
     for joint in joints:
         results[joint] = {}
         
@@ -102,17 +102,23 @@ def main(data):
         # unique_vis = df["visibility_category"].unique()
 
         #right now, just looking at distributions of visible vs not visible
-        for vis_label, vis_value in [("visible", 1), ("not_visible", [2,3,4])]:
-            mask = (data['joint_name' == joint]['mmpose_confidence'] & data['visibility_category'] == [vis_value])
-            scores = data.loc[mask].values
+        # for vis_label, vis_value in [("visible", 1), ("not_visible", [2,3,4])]:
+        #     mask = (df["joint_name"] == joint) & (df["visibility_category"].isin(vis_value))
+        for vis_label, vis_value in [
+                ("visible",     [1]),          # <-- wrap 1 in a list
+                ("not_visible", [2, 3, 4])]:   # already a list
+            mask = (df["joint_name"] == joint) & df["visibility_category"].isin(vis_value)
 
+            scores = df.loc[mask, "mmpose_confidence"].values
+            
             if scores.size == 0:
                 # No data for this joint/visibility – we store NaNs so downstream code can detect it.
                 results[joint][vis_label] = {"a": np.nan, "b": np.nan,
                                              "n": 0, "success": False}
                 continue
 
-            alpha_opt, beta_opt, ok = fit_beta(scores)
+            
+            alpha_opt, beta_opt, ok = beta_fit(scores)
 
             results[joint][vis_label] = {
                 "a": alpha_opt,
