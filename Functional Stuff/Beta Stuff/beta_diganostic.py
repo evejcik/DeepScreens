@@ -1,16 +1,13 @@
 import pandas as pd
 import numpy as np
 import argparse
-import scipy.special as sc
+from scipy.special import betaln   # log of the beta function B(α,β)
 
-
-def beta_func(alpha, beta):
-    return sc.beta(alpha, beta)
 
 ##negative log posterior J(alpha, beta)
-def neg_log_posterior(alpha, beta, scores, alpha_prior, beta_prior):
+def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior, beta_prior):
     c = scores
-    c = np.clip(c, float(1e-6), 1.0 - (1e-6) )
+    c = np.clip(c, eps, 1.0 - eps)
     N = len(scores)
 
     #(alpha - 1)
@@ -21,7 +18,7 @@ def neg_log_posterior(alpha, beta, scores, alpha_prior, beta_prior):
     beta_1 = (beta - 1.0)
 
     sigma_log_1_ci = np.sum(np.log(1.0 - c))
-    n_log_beta = N * np.log(beta_func(alpha, beta))
+    n_log_beta = N * np.log(betaln(alpha, beta))
 
     sum_term = alpha_1 * sigma_log_ci + beta_1 * sigma_log_1_ci - n_log_beta
     final = sum_term + (alpha - alpha_prior) + (beta - beta_prior)
