@@ -50,17 +50,19 @@ def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0,
 
     return float(final)
 
-## MAP with weak Beta prior
-
 ## Logit Gaussian
 
 ## Jitter and clip -> alternatives:  Hierarchical / Empirical‑Bayes pooling & Isotonic regression (non‑parametric)
 
-def jitter(scores, epsilon = float(1e-6)):
+def jitter(scores, epsilon = float(1e-6)): #data now has non zero variance. A zero variance, for a beta distribution, means that when the optimizer
+    #is trying to fit the best alpha and beta to the distribution, beta goes to 0 and alpha goes to infinity -> not good for trying to find a reasonal 
+    #distribution of probabilities for the confidence scores
     scores = np.clip(epsilon, 1 - epsilon)
-    scores = scores + epsilon * N(0,1)
+    jittered_scores = scores + epsilon * N(0,1)
 
-    scores = np.clip(epsilon, 1 - epsilon)
+    clipped_jittered_scores = np.clip(jittered_scores, epsilon, 1 - epsilon)
+
+    return clipped_jittered_scores
 
 ## Hierarchical / Empirical‑Bayes pooling
 
