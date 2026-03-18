@@ -27,7 +27,9 @@ def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0,
 
     negative_log_likelihood = alpha_1 * sigma_log_ci + beta_1 * sigma_log_1_ci - n_log_beta
 
-    log_prior = - (alpha - alpha_prior) - (beta - beta_prior) #right now, set to 2 and 2 to keep prior weak
+    ##we get this part by taking the log of the exponential distribution on alpha and beta -> if we change this, we change it here
+    log_prior = - (alpha - alpha_prior) - (beta - beta_prior) #right now, set to 2 and 2 to keep prior weak 
+
     final = negative_log_likelihood - log_prior
 
     return float(final)
