@@ -21,12 +21,14 @@ def moments(scores): #quick, closed‑form way to pick α and β just from
 
 ##negative log posterior J(alpha, beta)
 def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0, beta_prior = 2.0): 
+    #MLE out of the question, confidence scores are all wayyyyy too close to 1 so the optimizer is really struggling to find a good alpha & beta
+    #so we choose MAP with weak Beta (2,2) prior
     ##FOR OPTIMIZATION'S SAKE: consider placing a different distribution over alpha and beta parameters 
     # i.e., a gamma or hierarchical bayes distrbution
     #as opposed to the initial exponential distribution
 
     c = scores
-    c = np.clip(c, eps, 1.0 - eps)
+    c = jitter(scores)
     N = len(scores)
 
     #(alpha - 1)
@@ -52,7 +54,13 @@ def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0,
 
 ## Logit Gaussian
 
-## Jitter and clip
+## Jitter and clip -> alternatives:  Hierarchical / Empirical‑Bayes pooling & Isotonic regression (non‑parametric)
+
+def jitter(scores, epsilon = float(1e-6)):
+    scores = np.clip(epsilon, 1 - epsilon)
+    scores = scores + epsilon * N(0,1)
+
+    scores = np.clip(epsilon, 1 - epsilon)
 
 ## Hierarchical / Empirical‑Bayes pooling
 
