@@ -28,7 +28,7 @@ def neg_log_posterior(alpha, beta, scores, eps: float = 1e-6, alpha_prior = 2.0,
     #as opposed to the initial exponential distribution
 
     c = scores
-    c = jitter(scores)
+    c = jitter(scores, eps)
     N = len(scores)
 
     #(alpha - 1)
@@ -69,3 +69,20 @@ def jitter(scores, epsilon = float(1e-6)): #data now has non zero variance. A ze
 ## Isotonic regression (non‑parametric)
 
 ## Simple Binning
+def main(data):
+    joints = data["joint_name"].unique()
+    for joint in joints:
+        joint_data = data.loc[[joint]]['mmpose_confidence']
+        # scores = joint_data['mmpose_confidence']
+        sample_mean, sample_var, k, alpha_mom, beta_mom = moments(joint_data)
+        neg_log_posterior(alpha = alpha_mom, beta = beta_mom, scores = joint_data, eps, alpha_prior, beta_prior)
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser
+    ap.add("--data")
+    # ap.add("--alpha", default = ,type = float)
+    # ap.add("--beta", default = ,type = float)
+
+    args = ap.parse_args()
+    main(args.data)
