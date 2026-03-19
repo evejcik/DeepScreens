@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import argparse
+from scipy.stats import beta
 
 from beta_MAP import jitter, moments, beta_fit, posterior
 ##to be used when a joint has very few visible samples (i.e., Ramona right ankle only has 9 visible samples, I'm sure some down the road will have 0 visible samples for ankles, feet, etc.)''
@@ -105,11 +106,29 @@ def main(data):
         print(f"{joint:>12} | "
               f"vis n={vis['n']:4d}  α={vis['a']:.2f} β={vis['b']:.2f} "
               f"| not_vis n={not_vis['n']:4d}  α={not_vis['a']:.2f} β={not_vis['b']:.2f}")
-
-    # for c in [0.95, 0.98, 0.99, 0.999]:
-    #     print(f"c={c:.3f} → trust={posterior(c):.3f}") #posterior confidence -> p(visible | confidence)
+    print("\n=== Example of the full posterior (global) ===")
 
 
+    for c in [0.95, 0.98, 0.99, 0.999]:
+        p = posterior_global(
+                c,
+                pi=pi_global,
+                a_vis=a_vis_global,
+                b_vis=b_vis_global,
+                a_not_vis=a_not_vis_global,
+                b_not_vis=b_not_vis_global)
+        print(f"c={c:.3f} → P(visible|c) = {p:.3f}")
+
+
+def posterior_global(scores, pi, a_vis, b_vis, a_not_vis, b_not_vis): #p(visible | scores) means we also need to miltiple beta likelihood by pi (global prior) 
+    #and complementary (1-pi) for inivisible class
+    pdf_vis = beta.pdf(scores, a_vis, b_vis)
+    pdf_not_vis = beta.pdf(scores, a_not_vis, b_not_vis)
+    eps = float(1e-12)
+    num = pi * pdf_vis
+    denom = num + (1.0 - pi) * pdf_not_vis + eps
+
+    return num/denom
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()

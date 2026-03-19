@@ -75,7 +75,7 @@ def beta_fit(scores, alpha_prior=2.0, beta_prior=2.0):
         return float(alpha_prior), float(beta_prior), False  # ← fallback to prior
     
     x0 = np.array([alpha0, beta0])
-    bounds = [(1e-3, None), (1e-3, None)]  # ← add upper bounds!
+    bounds = [(1e-3, None), (1e-3, None)]  # when i add in upper bounds (as opposed to None), the 
 
 
     res = minimize( #minimizes the negative log posterior which is calculated with the alpha and beta we are feeding it in x0
