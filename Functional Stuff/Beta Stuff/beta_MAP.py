@@ -65,20 +65,15 @@ def jitter(scores, epsilon = float(1e-6)): #data now has non zero variance. A ze
 
     return clipped_jittered_scores
 
-## Hierarchical / Empirical‑Bayes pooling
 
-## Isotonic regression (non‑parametric)
-
-## Simple Binning
-
-
-def beta_fit(scores):
+def beta_fit(scores, alpha_prior=2.0, beta_prior=2.0):
     mu, var, k, alpha0, beta0 = moments(scores)
     bounds = [(1e-3, None), (1e-3, None)] #parameters stay strictly positive!
     x0 = np.array([alpha0, beta0])
 
     res = minimize( #minimizes the negative log posterior which is calculated with the alpha and beta we are feeding it in x0
-        fun=lambda pars: neg_log_posterior(pars[0], pars[1], scores),
+        fun=lambda pars: neg_log_posterior(pars[0], pars[1], scores,
+        alpha_prior=alpha_prior, beta_prior=beta_prior),
         x0=x0,
         method='L-BFGS-B',
         bounds=[(1e-3, None), (1e-3, None)],

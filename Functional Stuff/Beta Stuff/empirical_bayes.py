@@ -2,10 +2,22 @@ import numpy as np
 import pandas as pd
 import argparse
 
-
+from beta_MAP import jitter, moments, beta_fit, posterior
 ##to be used when a joint has very few visible samples (i.e., Ramona right ankle only has 9 visible samples, I'm sure some down the road will have 0 visible samples for ankles, feet, etc.)''
 
 #first need to estimate the global prior - all confidence scores from csv, for all visibility classes
+def global_prior(df):
+    #Fraction of rows that are labelled visible (visibility_category == 1)
+    n_vis = (df["visibility_category"] == 1).sum() #or could be np.sum(df["visibility_category"] == 1)
+    return float(n_vis / len(df))
+
+def global_beta(scores):
+    # scores = df['mmpose_confidence']
+    jittered_scores = jitter(scores)
+    mu, var, k, alpha0, beta0 = moments(scores)
+
+    global_a, global_b, _ = beta_fit(scores, alpha_prior=2.0, beta_prior=2.0)
+    return global_a, global_b #this is the hyper-prior aka the global beta
 
 #apply jitter and compute mom start values for a and b 
 #optionally refine those a_0 and b_0 values with an MAP optimisation using the same weak prior (2,2) as in beta MAP.py. the result a_0, b_0 is the global beta.
@@ -13,10 +25,66 @@ import argparse
 
 #once we have the global prior, we can pass the global parameters of this distribution into the loss function for a given point, especially if the number of samples is low for that specific one.
 
+def main(data):
+    df = pd.read_csv(data)
+    # print(df.columns)
+    scores = df['mmpose_confidence']
+    global_a, global_b = global_beta(scores) 
+    pi_global = global_prior(df)
+
+    scores_vis = df[df['visibility_category'] == 1]['mmpose_confidence'].values
+    # print(np.sum(scores_vis))
+    a_vis_global, b_vis_global = global_beta(scores_vis)
+
+    scores_not_vis = df[df['visibility_category'] != 1]['mmpose_confidence'].values
+    a_not_vis_global, b_not_vis_global = global_beta(scores_not_vis)
+
+    results = {}
+    joints = df['joint_name'].unique()
+
+    for joint in joints:
+        results[joint] = {}
+
+        for vis_label, vis_value in [
+                ("visible",     [1]),          # <-- wrap 1 in a list
+                ("not_visible", [2, 3, 4])]:   # already a list
+            mask = (df["joint_name"] == joint) & df["visibility_category"].isin(vis_value)
+
+            scores = df.loc[mask, "mmpose_confidence"].values
+            
+            if scores.size == 0:
+                # No data for this joint/visibility – we store NaNs so downstream code can detect it.
+                results[joint][vis_label] = {"a": np.nan, "b": np.nan,
+                                             "n": 0, "success": False}
+                continue
+
+            
+            alpha_opt, beta_opt, ok = beta_fit(scores)
+
+            results[joint][vis_label] = {
+                "a": alpha_opt,
+                "b": beta_opt,
+                "n": int(scores.size),
+                "success": ok
+            }
+
+    print("\n=== Beta MAP fit summary ===")
+    for joint, d in results.items():
+        vis = d["visible"]
+        not_vis = d["not_visible"]
+        print(f"{joint:>12} | "
+              f"vis n={vis['n']:4d}  α={vis['a']:.2f} β={vis['b']:.2f} "
+              f"| not_vis n={not_vis['n']:4d}  α={not_vis['a']:.2f} β={not_vis['b']:.2f}")
+
+    for c in [0.95, 0.98, 0.99, 0.999]:
+        print(f"c={c:.3f} → trust={posterior(c):.3f}") #posterior confidence -> p(visible | confidence)
+
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--df")
+    ap.add_argument("--data")
 
     args = ap.parse_args()
-    main(args.df)
+    main(args.data)
 
