@@ -45,9 +45,9 @@ def main(data):
     for joint in joints:
         results[joint] = {}
 
-        for vis_label, vis_value in [
-                ("visible",     [1]),          # <-- wrap 1 in a list
-                ("not_visible", [2, 3, 4])]:   # already a list
+        for vis_label, vis_value, prior_a, prior_b in [
+                ("visible",     [1], a_vis_global, b_vis_global),          # <-- wrap 1 in a list
+                ("not_visible", [2, 3, 4], a_not_vis_global, b_not_vis_global)]:   # already a list
             mask = (df["joint_name"] == joint) & df["visibility_category"].isin(vis_value)
 
             scores = df.loc[mask, "mmpose_confidence"].values
@@ -58,8 +58,10 @@ def main(data):
                                              "n": 0, "success": False}
                 continue
 
-            
-            alpha_opt, beta_opt, ok = beta_fit(scores)
+            alpha_opt, beta_opt, ok = beta_fit(
+                    scores,
+                    alpha_prior = prior_a,
+                    beta_prior = prior_b)
 
             results[joint][vis_label] = {
                 "a": alpha_opt,
