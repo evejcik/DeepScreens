@@ -135,6 +135,13 @@ def main(data):
               f"vis n={vis['n']:4d}  α={vis['a']:.2f} β={vis['b']:.2f} "
               f"| not_vis n={not_vis['n']:4d}  α={not_vis['a']:.2f} β={not_vis['b']:.2f}")
     
+def posterior(c): #takes parameters a and b for a joint and calculates the posterior p(visible | confidence). just looking at a few of the returned parameters from the table, we can 
+    #decide on how confident we are. 
+    #c = confidence score
+    #p is empirical prior of visibility for that joint
+    #beta.pdf(c, a, b) = Beta(c|a,b) from scipy.stats
+    p = vis_n / (vis_n + not_vis_n)
+
 
 
 if __name__ == "__main__":
