@@ -67,7 +67,7 @@ def main(data_path, threshold):
     
 
 if __name__ == "main":
-    ap.argparse.ArgumentParser()
+    ap = argparse.ArgumentParser()
     ap.add_argument("--data_path")
     ap.add_argument("--threshold", type = int, default = 0.3) #as in cited paper
 
