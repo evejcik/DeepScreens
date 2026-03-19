@@ -3,6 +3,7 @@ import numpy as np
 import argparse
 from scipy.special import betaln   # log of the beta function B(α,β)
 from scipy.optimize import minimize
+from scipy.stats import beta
 
 
 def moments(scores): #quick, closed‑form way to pick α and β just from the sample mean and sample variance of the scores.
@@ -155,9 +156,9 @@ def posterior(c): #takes parameters a and b for a joint and calculates the poste
     beta_not_vis_pdf = beta.pdf(c, a_not_vis, b_not_vis)
     post = (p * beta_vis_pdf) / ((p * beta_vis_pdf) + ((1-p) * beta_not_vis_pdf))
 
+    return post
+
     
-
-
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
