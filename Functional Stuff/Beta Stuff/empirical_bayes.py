@@ -16,7 +16,16 @@ def global_beta(scores):
     jittered_scores = jitter(scores)
     mu, var, k, alpha0, beta0 = moments(jittered_scores)
 
+    if np.isnan(alpha0) or np.isnan(beta0):
+        print(f"  → MoM failed on {len(scores)} samples; returning (2, 2)")
+        return 2.0, 2.0  # ← fallback
+
     global_a, global_b, _ = beta_fit(jittered_scores, alpha_prior=2.0, beta_prior=2.0)
+
+    if np.isnan(global_a) or np.isnan(global_b):
+        print(f"  → Optimizer failed; using MoM: α={alpha0:.2f}, β={beta0:.2f}")
+        return float(alpha0), float(beta0)  # ← fallback to MoM
+
     return global_a, global_b 
 
 #optionally refine those a_0 and b_0 values with an MAP optimisation using the same weak prior (2,2) as in beta MAP.py. the result a_0, b_0 is the global beta.
@@ -37,9 +46,18 @@ def main(data):
 
     scores_not_vis = df[df['visibility_category'] != 1]['mmpose_confidence'].values
     a_not_vis_global, b_not_vis_global = global_beta(scores_not_vis)
-    print(f"\n=== Global hyper‑parameters ===")
-    print(f"Global visible Beta   : α={a_vis_global:.2f}, β={b_vis_global:.2f}")
-    print(f"Global not‑vis Beta   : α={a_not_vis_global:.2f}, β={b_not_vis_global:.2f}")
+
+    # ← fallback if NaN
+    if np.isnan(a_vis_global):
+        print("Warning: Global visible Beta failed; falling back to (2, 2)")
+        a_vis_global, b_vis_global = 2.0, 2.0
+    if np.isnan(a_not_vis_global):
+        print("Warning: Global not-visible Beta failed; falling back to (2, 2)")
+        a_not_vis_global, b_not_vis_global = 2.0, 2.0
+
+    print(f"\n=== Global hyper-parameters ===")
+    print(f"Global visible Beta   : a={a_vis_global:.2f}, β={b_vis_global:.2f}")
+    print(f"Global not-vis Beta   : a={a_not_vis_global:.2f}, β={b_not_vis_global:.2f}")
     
 
     results = {}
@@ -62,6 +80,7 @@ def main(data):
                 continue
 
             if scores.size < 10:  # ultra‑low sample count
+                print(f"DEBUG: {joint} {vis_label} n={scores.size} → using global prior")
                 # Skip the per‑joint fit; use the global prior as the final estimate
                 alpha_opt, beta_opt = (a_vis_global, b_vis_global) if vis_label == "visible" \
                                     else (a_not_vis_global, b_not_vis_global)

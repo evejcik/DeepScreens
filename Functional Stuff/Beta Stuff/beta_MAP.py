@@ -68,16 +68,23 @@ def jitter(scores, epsilon = float(1e-6)): #data now has non zero variance. A ze
 
 def beta_fit(scores, alpha_prior=2.0, beta_prior=2.0):
     mu, var, k, alpha0, beta0 = moments(scores)
-    bounds = [(1e-3, None), (1e-3, None)] #parameters stay strictly positive!
+
+    # Guard against invalid MoM start values -> Add better error handling and bounds checking
+    if np.isnan(alpha0) or np.isnan(beta0) or np.isinf(alpha0) or np.isinf(beta0):
+        print(f"Warning: MoM returned invalid values (α={alpha0}, β={beta0})")
+        return float(alpha_prior), float(beta_prior), False  # ← fallback to prior
+    
     x0 = np.array([alpha0, beta0])
+    bounds = [(1e-3, None), (1e-3, None)]  # ← add upper bounds!
+
 
     res = minimize( #minimizes the negative log posterior which is calculated with the alpha and beta we are feeding it in x0
-        fun=lambda pars: neg_log_posterior(pars[0], pars[1], scores,
-        alpha_prior=alpha_prior, beta_prior=beta_prior),
-        x0=x0,
-        method='L-BFGS-B',
-        bounds=[(1e-3, None), (1e-3, None)],
-        options={'ftol': 1e-9, 'maxiter': 2000}
+        fun = lambda pars: neg_log_posterior(pars[0], pars[1], scores,
+        alpha_prior = alpha_prior, beta_prior=beta_prior),
+        x0 = x0,
+        method = 'L-BFGS-B',
+        bounds = bounds,
+        options = {'ftol': 1e-9, 'maxiter': 2000}
       )
 
     if res.success:
