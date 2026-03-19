@@ -14,12 +14,11 @@ def global_prior(df):
 def global_beta(scores):
     # scores = df['mmpose_confidence']
     jittered_scores = jitter(scores)
-    mu, var, k, alpha0, beta0 = moments(scores)
+    mu, var, k, alpha0, beta0 = moments(jittered_scores)
 
-    global_a, global_b, _ = beta_fit(scores, alpha_prior=2.0, beta_prior=2.0)
-    return global_a, global_b #this is the hyper-prior aka the global beta
+    global_a, global_b, _ = beta_fit(jittered_scores, alpha_prior=2.0, beta_prior=2.0)
+    return global_a, global_b 
 
-#apply jitter and compute mom start values for a and b 
 #optionally refine those a_0 and b_0 values with an MAP optimisation using the same weak prior (2,2) as in beta MAP.py. the result a_0, b_0 is the global beta.
 #because we are using ALL data, the global variance is never zero, so the method of moments (mom) estimate is stable.
 
@@ -38,6 +37,10 @@ def main(data):
 
     scores_not_vis = df[df['visibility_category'] != 1]['mmpose_confidence'].values
     a_not_vis_global, b_not_vis_global = global_beta(scores_not_vis)
+    print(f"\n=== Global hyper‑parameters ===")
+    print(f"Global visible Beta   : α={a_vis_global:.2f}, β={b_vis_global:.2f}")
+    print(f"Global not‑vis Beta   : α={a_not_vis_global:.2f}, β={b_not_vis_global:.2f}")
+    
 
     results = {}
     joints = df['joint_name'].unique()
@@ -58,7 +61,13 @@ def main(data):
                                              "n": 0, "success": False}
                 continue
 
-            alpha_opt, beta_opt, ok = beta_fit(
+            if scores.size < 10:  # ultra‑low sample count
+                # Skip the per‑joint fit; use the global prior as the final estimate
+                alpha_opt, beta_opt = (a_vis_global, b_vis_global) if vis_label == "visible" \
+                                    else (a_not_vis_global, b_not_vis_global)
+                ok = False
+            else:
+                alpha_opt, beta_opt, ok = beta_fit(
                     scores,
                     alpha_prior = prior_a,
                     beta_prior = prior_b)
@@ -78,8 +87,8 @@ def main(data):
               f"vis n={vis['n']:4d}  α={vis['a']:.2f} β={vis['b']:.2f} "
               f"| not_vis n={not_vis['n']:4d}  α={not_vis['a']:.2f} β={not_vis['b']:.2f}")
 
-    for c in [0.95, 0.98, 0.99, 0.999]:
-        print(f"c={c:.3f} → trust={posterior(c):.3f}") #posterior confidence -> p(visible | confidence)
+    # for c in [0.95, 0.98, 0.99, 0.999]:
+    #     print(f"c={c:.3f} → trust={posterior(c):.3f}") #posterior confidence -> p(visible | confidence)
 
 
 
