@@ -4,6 +4,10 @@ import argparse
 from scipy.stats import beta
 
 from beta_MAP import jitter, moments, beta_fit, posterior
+
+import joblib, pathlib
+
+from isotonic_regression import fit_global_isotonic
 ##to be used when a joint has very few visible samples (i.e., Ramona right ankle only has 9 visible samples, I'm sure some down the road will have 0 visible samples for ankles, feet, etc.)''
 
 #first need to estimate the global prior - all confidence scores from csv, for all visibility classes
@@ -11,6 +15,10 @@ def global_prior(df):
     #Fraction of rows that are labelled visible (visibility_category == 1)
     n_vis = (df["visibility_category"] == 1).sum() #or could be np.sum(df["visibility_category"] == 1)
     return float(n_vis / len(df))
+
+
+def posterior_from_isotonic(scores, iso):
+    return iso.predict(np.atleast_1d(scores))
 
 def global_beta(scores):
     # scores = df['mmpose_confidence']
@@ -39,7 +47,9 @@ def main(data):
     # print(df.columns)
     scores = df['mmpose_confidence']
     global_a, global_b = global_beta(scores) 
+
     pi_global = global_prior(df)
+    iso_glonal = fit_global_isotonic(df)
 
     scores_vis = df[df['visibility_category'] == 1]['mmpose_confidence'].values
     # print(np.sum(scores_vis))
@@ -135,5 +145,5 @@ if __name__ == "__main__":
     ap.add_argument("--data")
 
     args = ap.parse_args()
-    main(args.data)
+    main(data = args.data)
 
