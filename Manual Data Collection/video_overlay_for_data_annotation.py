@@ -365,7 +365,7 @@ def resize_frame_to_match(frame1, frame2):
         frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
     return frame2
 
-def main(mp4_path, json_path, start, end, create_new_df, video_nobbox):
+def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nobbox):
     credentials_path = Path('Google Cloud Credentials/credentials.json')
     json_data, json_dict = load_json(json_path)
     meta = json_data['meta_info_3d'] 
@@ -380,6 +380,8 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox):
                    int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))]
     
     frame_id = 0
+    frame_id_nobbox = start_nobbox
+    
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     if end < 0:
         end = total - 1
@@ -472,7 +474,9 @@ if __name__ == "__main__":
     ap.add_argument("--create_new_df", type = int)
     ap.add_argument("--start", type = int)
     ap.add_argument("--video_nobbox", default = None)
+    ap.add_argument("--start_nobbox", type=int, default=0,
+                help="frame index at which to start reading video_nobbox")
 
     args = ap.parse_args()
-    main(args.mp4, args.json, args.start, args.end, args.create_new_df, args.video_nobbox)
+    main(args.mp4, args.json, args.start, args.end, args.create_new_df, args.video_nobbox, args.start_nobbox)
 
