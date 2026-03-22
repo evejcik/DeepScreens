@@ -311,7 +311,7 @@ def main(data_path, save_dir='./results', test_size=0.3, random_state=42):
 
     
 
-    df = pd.read_csv('/Users/emmavejcik/Downloads/Copy of Thesis Data Collection NEW - Ramona 1_1369 (4).csv')
+    df = pd.read_csv(data_path)
 
     print("Visibility Category Distribution:")
     print(df['visibility_category'].value_counts().sort_index())
