@@ -6,6 +6,8 @@ import numpy as np
 import argparse
 import pandas as pd
 
+import re
+
 import gspread
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
@@ -124,7 +126,13 @@ def color_for_inst(instance_ind):
     return (b, g, r)
 
 
-import numpy as np
+def _segment_start_from_path(path: str) -> int:
+    """
+    Extract the first integer after the word “segment_” in a filename.
+    Example:  “…/segment_4662_5965.mp4” → 4662
+    """
+    m = re.search(r"segment_(\d+)", Path(path).name)
+    return int(m.group(1)) if m else 0
 
 def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
     """
@@ -381,7 +389,18 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
     
     frame_id = 0
     frame_id_nobbox = start_nobbox
-    
+
+    if video_nobbox is not None:
+        cap_nobbox = cv2.VideoCapture(video_nobbox)
+
+        # extract “4662” from “…/segment_4662_5965.mp4”
+        segment_start = _segment_start_from_path(video_nobbox)
+
+        # user‑supplied offset (default = 0, or whatever you pass)
+        frame_id_nobbox = segment_start + (start_nobbox or 0)
+    else:
+        cap_nobbox = None
+
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     if end < 0:
         end = total - 1
@@ -416,7 +435,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         # Read second video frame if available
         frame_nobbox = None
         if cap_nobbox is not None:
-            cap_nobbox.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
+            cap_nobbox.set(cv2.CAP_PROP_POS_FRAMES, frame_id_nobbox)
             ok_nobbox, frame_nobbox = cap_nobbox.read()
         
         instances = instances_map.get(frame_id, [])
@@ -454,15 +473,18 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         
         if key == ord("q"):
             break
-        if key == ord(" "):
-            frame_id += 1  # Fixed: was concat_frame += 1
+        if key == ord(" "):                 # forward one frame
+            frame_id        += 1
+            if cap_nobbox is not None:
+                frame_id_nobbox += 1
             continue
-        elif key == ord('a'):
-            frame_id = max(0, frame_id - 1)  # Fixed: was concat_frame = max(...)
-    
-    cv2.destroyAllWindows()
-    if cap_nobbox is not None:
-        cap_nobbox.release()
+        elif key == ord('a'):               # back one frame
+            frame_id = max(0, frame_id - 1)
+            if cap_nobbox is not None:
+                frame_id_nobbox = max(0, frame_id_nobbox - 1)
+        cv2.destroyAllWindows()
+        if cap_nobbox is not None:
+            cap_nobbox.release()
 
 
 if __name__ == "__main__":
@@ -476,7 +498,8 @@ if __name__ == "__main__":
     ap.add_argument("--video_nobbox", default = None)
     ap.add_argument("--start_nobbox", type=int, default=0,
                 help="frame index at which to start reading video_nobbox")
+    ap.add_argument("--start", type = int)
 
     args = ap.parse_args()
-    main(args.mp4, args.json, args.start, args.end, args.create_new_df, args.video_nobbox, args.start_nobbox)
+    main(args.mp4, args.json, args.start, args.end, args.create_new_df, args.start, args.video_nobbox, args.start_nobbox)
 
