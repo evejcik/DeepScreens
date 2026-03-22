@@ -806,6 +806,9 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
     frame_id_nobbox = 0
     fps_ratio = 1.0
     frame_id_nobbox_fractional = 0.0
+
+    segment_start_frame = 0
+
     if video_nobbox is not None:
         cap_nobbox = cv2.VideoCapture(video_nobbox)
         if start_nobbox is None:
@@ -919,9 +922,11 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         elif key == ord('a'):               # back one frame
             frame_id = max(0, frame_id - 1)
             if cap_nobbox is not None:
+                segment_start_offset = int((segment_start_frame + start) / fps_ratio)
                 frame_id_nobbox_fractional -= fps_ratio
                 frame_id_nobbox += int(frame_id_nobbox_fractional)
                 frame_id_nobbox_fractional -= int(frame_id_nobbox_fractional)
+                frame_id_nobbox = max(segment_start_offset, frame_id_nobbox)
             continue
     
     cv2.destroyAllWindows()
