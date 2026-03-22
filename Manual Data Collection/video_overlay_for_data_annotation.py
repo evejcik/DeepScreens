@@ -380,7 +380,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
     instances_map = frame_to_instances_map(json_data)
     cap = cv2.VideoCapture(mp4_path)
     
-    cap_nobbox = None  # Initialize as None
+    cap_nobbox = None
     if video_nobbox is not None:
         cap_nobbox = cv2.VideoCapture(video_nobbox)
     
@@ -388,21 +388,20 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
                    int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))]
     
     frame_id = 0
-    frame_id_nobbox = start_nobbox
-
+    if start is None:
+        start = 0
+    frame_id = start
+    
+    frame_id_nobbox = 0
     if video_nobbox is not None:
         cap_nobbox = cv2.VideoCapture(video_nobbox)
-
-        # extract “4662” from “…/segment_4662_5965.mp4”
-        segment_start = _segment_start_from_path(video_nobbox)
-
-        # user‑supplied offset (default = 0, or whatever you pass)
-        frame_id_nobbox = segment_start + (start_nobbox or 0)
+        if start_nobbox is None:
+            start_nobbox = 0
+        frame_id_nobbox = _segment_start_from_path(video_nobbox) + start + start_nobbox
     else:
         cap_nobbox = None
-
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    if end < 0:
+    if end is None or end < 0:
         end = total - 1
     data = "rows_df.csv"
     if create_new_df == 1:
@@ -417,10 +416,6 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         create_new_df = 0
     
     cv2.namedWindow("overlay", cv2.WINDOW_NORMAL)
-    if start is None:
-        frame_id = 0
-    else:
-        frame_id = start
     
     while True:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
@@ -465,6 +460,17 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             # Resize frame_nobbox to match frame dimensions
             frame_nobbox = resize_frame_to_match(frame, frame_nobbox)
             display_frame = cv2.vconcat([frame, frame_nobbox])
+            text_y = display_frame.shape[0] // 2
+            cv2.putText(
+                display_frame,
+                f"Frame: {frame_id_nobbox}",
+                (10, text_y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 0, 0),
+                2,
+                cv2.LINE_AA
+            )
         else:
             display_frame = frame
         
@@ -482,10 +488,10 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             frame_id = max(0, frame_id - 1)
             if cap_nobbox is not None:
                 frame_id_nobbox = max(0, frame_id_nobbox - 1)
-        cv2.destroyAllWindows()
-        if cap_nobbox is not None:
-            cap_nobbox.release()
-
+    
+    cv2.destroyAllWindows()
+    if cap_nobbox is not None:
+        cap_nobbox.release()
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -496,10 +502,16 @@ if __name__ == "__main__":
     ap.add_argument("--create_new_df", type = int)
     ap.add_argument("--start", type = int)
     ap.add_argument("--video_nobbox", default = None)
-    ap.add_argument("--start_nobbox", type=int, default=0,
-                help="frame index at which to start reading video_nobbox")
-    ap.add_argument("--start", type = int)
+    ap.add_argument("--start_nobbox", type=int, default=0)
 
     args = ap.parse_args()
-    main(args.mp4, args.json, args.start, args.end, args.create_new_df, args.start, args.video_nobbox, args.start_nobbox)
+    main(
+        args.mp4, #regular vid with bboxes path
+        args.json, 
+        args.start, #regular vid with bboxes start frame
+        args.end, 
+        args.create_new_df, 
+        args.video_nobbox, #vid without bboxes path
+        args.start_nobbox #regular vid without bboxes start frame
+        )
 
