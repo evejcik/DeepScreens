@@ -397,7 +397,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         cap_nobbox = cv2.VideoCapture(video_nobbox)
         if start_nobbox is None:
             start_nobbox = 0
-        frame_id_nobbox = _segment_start_from_path(video_nobbox) + start + start_nobbox
+        frame_id_nobbox = _segment_start_from_path(mp4_path) + start
     else:
         cap_nobbox = None
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
@@ -455,7 +455,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             label = f"Instance: {instance_ind}" if track_id is None else f"Frame: {frame_id}, Instance: {instance_ind} out of {len(instances) - 1} Track Id: {track_id}"
             draw_bbox_and_label(frame, instance=instance, instance_ind=instance_ind, label=label)
         
-        # Concatenate or display single frame
+                # Concatenate or display single frame
         if frame_nobbox is not None:
             # Resize frame_nobbox to match frame dimensions
             frame_nobbox = resize_frame_to_match(frame, frame_nobbox)
@@ -463,11 +463,21 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             text_y = display_frame.shape[0] // 2
             cv2.putText(
                 display_frame,
-                f"Frame: {frame_id_nobbox}",
+                f"Frame: {frame_id}",
                 (10, text_y),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.8,
                 (0, 0, 0),
+                2,
+                cv2.LINE_AA
+            )
+            cv2.putText(
+                display_frame,
+                f"Frame: {frame_id_nobbox}",
+                (10, text_y + 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 0, 255),
                 2,
                 cv2.LINE_AA
             )
@@ -487,7 +497,8 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         elif key == ord('a'):               # back one frame
             frame_id = max(0, frame_id - 1)
             if cap_nobbox is not None:
-                frame_id_nobbox = max(0, frame_id_nobbox - 1)
+                frame_id_nobbox = max(frame_id, frame_id_nobbox - 1)
+            continue
     
     cv2.destroyAllWindows()
     if cap_nobbox is not None:
