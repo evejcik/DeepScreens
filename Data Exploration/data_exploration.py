@@ -16,6 +16,17 @@ def main(data):
     print("\n1. VISIBILITY CATEGORY DISTRIBUTION")
     print(df['visibility_category'].value_counts().sort_index())
 
+
+    print("="*80) #Making order invariant set of occlusin reasons
+    #take comma separated strings, split by comma
+    df['occlusion_reason'] = (df['occlusion_reason'].str.split(',').apply(lambda x: ", ".join(sorted(set(item.strip() for item in x))) if isinstance(x, list) else ""))
+    print("OCCLUSION REASON VALUE COUNTS")
+
+    print(f"Total unique occlusion_reason values: {df['occlusion_reason'].nunique()}")
+    print("\nOcclusion Reason Counts")
+    print(df['occlusion_reason'].value_counts())
+
+
     # 2. Check occlusion_reason for VISIBLE joints
     print("\n2. VISIBLE JOINTS (visibility_category == 1): Should have NO occlusion reason")
     visible_df = df[df['visibility_category'] == 1.0]
@@ -53,11 +64,7 @@ def main(data):
         print("Hallucinated samples:")
         print(hallucinated_df[['joint_name', 'visibility_category', 'occlusion_reason', 'mmpose_confidence', 'annotator_confidence']].head(10))
 
-    # 7. Count unique occlusion_reason values
-    print("\n7. OCCLUSION REASON VALUE COUNTS")
-    print(f"Total unique occlusion_reason values: {df['occlusion_reason'].nunique()}")
-    print("\nTop 15 occlusion_reason values:")
-    print(df['occlusion_reason'].value_counts().head(15))
+    
 
     # 8. Multi-label analysis
     print("\n8. MULTI-LABEL OCCLUSION REASONS")
@@ -69,3 +76,12 @@ def main(data):
         multi_label_examples = df[df['occlusion_reason'].str.contains(',', na=False)]['occlusion_reason'].unique()
         for example in multi_label_examples[:5]:
             print(f"  - {example}")
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+
+    ap.add_argument("--data", required = True)
+    args = ap.parse_args()
+
+    main(args.data)
