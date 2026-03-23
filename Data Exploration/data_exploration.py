@@ -64,6 +64,9 @@ def main(data):
     df = pd.read_csv(data)
     df = clean_occlusion_reason(df) #cleans up visibility categories 3 and 1
 
+
+    print(f'Number of 4.0 category: {len(df[df['visibility_category'] == 4.0])}')
+
     print("="*80)
     print("ANNOTATION SCHEME DIAGNOSTICS")
     print("="*80)
@@ -80,6 +83,7 @@ def main(data):
 
     print(f"Total unique occlusion_reason values: {df['occlusion_reason'].nunique()}")
     print("\nOcclusion Reason Counts")
+
     print(df['occlusion_reason'].value_counts())
 
 
@@ -140,5 +144,5 @@ if __name__ == "__main__":
     ap.add_argument("--data", required = True)
     args = ap.parse_args()
 
-    # main(args.data)
-    clean_occlusion_reason_debug(args.data)
+    main(args.data)
+    # find_nulls_in_occlusion_reason(args.data)
