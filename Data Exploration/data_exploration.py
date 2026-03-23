@@ -3,10 +3,66 @@ import numpy as np
 
 import argparse
 
+def clean_occlusion_reason(df):
+    #this is for when the visibility_category is 3 or 5 -> then there is no occlusion reason, so need to replace the blanks to prevent crashes
+
+    df['occlusion_reason'] = df['occlusion_reason'].astype(str) #makes sure object is treated as string, handles NaNs
+
+    # df.loc[~df['visibility_category'].isin([2.0, 4.0, 5.0]), 'occlusion_reason'] = "None"
+
+    df.loc[df['visibility_category'] == 3.0, 'occlusion_reason'] = "off screen"
+    df.loc[df['visibility_category'] == 1.0, 'occlusion_reason'] = 'visible'
+    df.loc[df['visibility_category'] == 4.0, 'occlusion_reason'] = 'confused, too ambiguous'
+
+    df.loc[df['occlusion_reason'].isna() | (df['occlusion_reason'] == 'nan'), 'occlusion_reason'] = "None" #just doing some double checking cleaning
+
+    return df
+
+
+def find_nulls_in_occlusion_reason(df):
+    df = pd.read_csv(df)
+    df.loc[df['occlusion_reason'].isna() | (df['occlusion_reason'] == 'nan'), 'occlusion_reason'] = "None"
+
+    cols = ['frame_id', ' instance_id', 'joint_name', 'visibility_category', 'occlusion_reason']
+    display_df = df[cols].head(20)
+    print(display_df.to_string(index = False, justify = 'left', col_space = 0))
+
+    # print(f'Frame Id: {df['frame_id']}     Visibility Category: {df['visibility_category']}           Occlusion Reason: {df['occlusion_reason']}')
+
+
+def clean_occlusion_reason_debug(df):
+    df['occlusion_reason'] = df['occlusion_reason'].astype(str)
+
+    # 1️⃣ Before any changes
+    print("[Step 0] Unique values pre‑clean:", df['occlusion_reason'].unique()[:10])
+
+    # 2️⃣ Apply mask that sets "None"
+    df.loc[~df['visibility_category'].isin([2.0, 4.0, 5.0]), 'occlusion_reason'] = "None"
+    print("[After Step 2] 4.0 count:", (df['visibility_category'] == 4.0).sum(),
+          " -> None count:", (df['visibility_category'] == 4.0).sum() - (df.loc[df['visibility_category']==4.0, 'occlusion_reason'] != "None").sum())
+
+    # 3️⃣ Overrides
+    df.loc[df['visibility_category'] == 3.0, 'occlusion_reason'] = "off screen"
+    df.loc[df['visibility_category'] == 1.0, 'occlusion_reason'] = 'visible'
+    df.loc[df['visibility_category'] == 4.0, 'occlusion_reason'] = 'confused, too ambiguous'
+
+    # Debug after overrides
+    ambigu_cnt = (df['visibility_category'] == 4.0).sum()
+    amb_correct = (df.loc[df['visibility_category']==4.0, 'occlusion_reason'] == 'confused, too ambiguous').sum()
+    print("[After overrides] 4.0 rows:", ambigu_cnt, " correctly set:", amb_correct)
+
+    # 4️⃣ Final NaN‑string clean‑up
+    df.loc[df['occlusion_reason'].isna() | (df['occlusion_reason'] == 'nan'), 'occlusion_reason'] = "None"
+    print("[Final] 4.0 still 'None'?", (df.loc[df['visibility_category']==4.0, 'occlusion_reason'] == "None").any())
+
+    return df
+
+
 
 def main(data):
 
     df = pd.read_csv(data)
+    df = clean_occlusion_reason(df) #cleans up visibility categories 3 and 1
 
     print("="*80)
     print("ANNOTATION SCHEME DIAGNOSTICS")
@@ -84,4 +140,5 @@ if __name__ == "__main__":
     ap.add_argument("--data", required = True)
     args = ap.parse_args()
 
-    main(args.data)
+    # main(args.data)
+    clean_occlusion_reason_debug(args.data)
