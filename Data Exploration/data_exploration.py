@@ -30,32 +30,15 @@ def find_nulls_in_occlusion_reason(df):
     # print(f'Frame Id: {df['frame_id']}     Visibility Category: {df['visibility_category']}           Occlusion Reason: {df['occlusion_reason']}')
 
 
-def clean_occlusion_reason_debug(df):
-    df['occlusion_reason'] = df['occlusion_reason'].astype(str)
+def find_these_fours(df):
+    
+    print(f'Number of 4.0 category: {len(df[df['visibility_category'] == 4.0])}')
 
-    # 1️⃣ Before any changes
-    print("[Step 0] Unique values pre‑clean:", df['occlusion_reason'].unique()[:10])
+    cols = ['frame_id', ' instance_id', 'joint_name', 'visibility_category', 'occlusion_reason']
+    df.loc[df['visibility_category'] == 4.0]
+    df_4 = df[cols].head(50)
 
-    # 2️⃣ Apply mask that sets "None"
-    df.loc[~df['visibility_category'].isin([2.0, 4.0, 5.0]), 'occlusion_reason'] = "None"
-    print("[After Step 2] 4.0 count:", (df['visibility_category'] == 4.0).sum(),
-          " -> None count:", (df['visibility_category'] == 4.0).sum() - (df.loc[df['visibility_category']==4.0, 'occlusion_reason'] != "None").sum())
-
-    # 3️⃣ Overrides
-    df.loc[df['visibility_category'] == 3.0, 'occlusion_reason'] = "off screen"
-    df.loc[df['visibility_category'] == 1.0, 'occlusion_reason'] = 'visible'
-    df.loc[df['visibility_category'] == 4.0, 'occlusion_reason'] = 'confused, too ambiguous'
-
-    # Debug after overrides
-    ambigu_cnt = (df['visibility_category'] == 4.0).sum()
-    amb_correct = (df.loc[df['visibility_category']==4.0, 'occlusion_reason'] == 'confused, too ambiguous').sum()
-    print("[After overrides] 4.0 rows:", ambigu_cnt, " correctly set:", amb_correct)
-
-    # 4️⃣ Final NaN‑string clean‑up
-    df.loc[df['occlusion_reason'].isna() | (df['occlusion_reason'] == 'nan'), 'occlusion_reason'] = "None"
-    print("[Final] 4.0 still 'None'?", (df.loc[df['visibility_category']==4.0, 'occlusion_reason'] == "None").any())
-
-    return df
+    print(display_df.to_string(index = False, justify = 'left', col_space = 0))
 
 
 
@@ -65,7 +48,8 @@ def main(data):
     df = clean_occlusion_reason(df) #cleans up visibility categories 3 and 1
 
 
-    print(f'Number of 4.0 category: {len(df[df['visibility_category'] == 4.0])}')
+   find_these_fours(df.copy)
+    
 
     print("="*80)
     print("ANNOTATION SCHEME DIAGNOSTICS")
