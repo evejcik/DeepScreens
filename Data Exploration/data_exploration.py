@@ -35,10 +35,10 @@ def find_these_fours(df):
     print(f'Number of 4.0 category: {len(df[df['visibility_category'] == 4.0])}')
 
     cols = ['frame_id', ' instance_id', 'joint_name', 'visibility_category', 'occlusion_reason']
-    df.loc[df['visibility_category'] == 4.0]
-    df_4 = df[cols].head(50)
+    df_fours = df.loc[df['visibility_category'] == 4.0]
+    df_4 = df_fours[cols].head(50)
 
-    print(display_df.to_string(index = False, justify = 'left', col_space = 0))
+    print(df_4.to_string(index = False, justify = 'left', col_space = 0))
 
 
 
@@ -46,9 +46,8 @@ def main(data):
 
     df = pd.read_csv(data)
     df = clean_occlusion_reason(df) #cleans up visibility categories 3 and 1
-
-
-   find_these_fours(df.copy)
+    
+    find_these_fours(df.copy(deep=True))
     
 
     print("="*80)
