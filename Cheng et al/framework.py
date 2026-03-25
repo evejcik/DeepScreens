@@ -18,3 +18,16 @@
 
 # The 3D TCN takes potentially incomplete 2D keypoints as input, and requires pairs of a 3D pose and a 2D pose with occlusion labels during training. 
 # We also add in a pose regularization term to penalize violations of keypoints that are estimated as unoccluded, contradicting the ground-truth labels.
+
+# WE WANT TO PRODUCE LOW C_I FOR OCCLUDED KEYPOINTS. (confidence for i ∈ [1, K] and K is the number of predefined keypoints)
+# We further apply optical flow to p_hat_i (estimated position of joint i)
+# The flow vector is o_i
+
+# Additionally, we need to process the location difference of keypoint i in the neighboring frames defined as d_i. 
+
+# Final confidence score for p_i = C*_i = C_i * exp(- ||o_i - d_i||^2_2)/(2 * std ^2)
+# If C*_i is smaller than a tuneable threshold p_i is labeled as an occluded keypoint.
+
+
+
+
