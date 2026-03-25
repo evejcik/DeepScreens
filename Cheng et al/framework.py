@@ -82,15 +82,16 @@ class LightweightTCN(nn.Module): #inherits from nn.Module (PyTorch's base class 
         self.relu = nn.ReLu()
 
     def forward(self, x, mask = None):
-        x = self.relu(self.conv1(x))
+        x = self.relu(self.conv1(x)) #max(0, x), non linear, so can now learn non-linear patterns, sparse, so lots of 0s, saves computation
         x = self.relu(self.conv2(x))
         x = self.relu(self.tconv1(x))
-        x = torch.sigmoid(self.tconv2(x))
+        x = torch.sigmoid(self.tconv2(x)) 
 
-        if mask is not None:
-            x = x * mask + (1 - mask) * x.detach()
+        if mask is not None: #if mask[i] = 1, keep x[i] (reliable joint, use smoothed output) #else, if mask[i] = 0, unreliable joint, remove, do not use.
+            x = x * mask + (1 - mask) * x.detach() #so if mask[i]= 0, then 1 - 0 = 1, so x.detach(), which means don't compute gradients on this value, don't learn from it
         
         return x
+
 
 
 def main(csv_path, window_size = 16, stride = 8, verbose = True):
