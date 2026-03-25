@@ -30,14 +30,48 @@
 
 import pandas as pd
 import numpy as np
+import torch
+import torch.nn as nn
+import argparse
 
-from data_loader import load_and_clean_data
+# from data_loader import load_and_clean_data
 
-def confidence_i (i: str, frame_n: str, df):
-    #input: joint i, frame_n (what frame we are at), df = pd.DataFrame
-    #output: confidence float for that joint i at frame_n
+def clean_occlusion_reason(df):
+    #this is for when the visibility_category is 3 or 5 -> then there is no occlusion reason, so need to replace the blanks to prevent crashes
 
-def confidence_i_star (i: str, confidence_i: list, optical_flow_i: list, difference_i: float, std: float):
+    df['occlusion_reason'] = df['occlusion_reason'].astype(str) #makes sure object is treated as string, handles NaNs
+
+    # df.loc[~df['visibility_category'].isin([2.0, 4.0, 5.0]), 'occlusion_reason'] = "None"
+
+    df.loc[df['visibility_category'] == 3.0, 'occlusion_reason'] = "off screen"
+    df.loc[df['visibility_category'] == 1.0, 'occlusion_reason'] = 'visible'
+    df.loc[df['visibility_category'] == 4.0, 'occlusion_reason'] = 'confused, too ambiguous'
+
+    df.loc[df['occlusion_reason'].isna() | (df['occlusion_reason'] == 'nan'), 'occlusion_reason'] = "None" #just doing some double checking cleaning
+
+    return df
+
+def normalize_occlusion_reasons(df):
+    #makes occlusion_reason order-invariant
+    #Example: "self_occlusion, external_object" == "external_object, self_occlusion"
+
+    df['occlusion_reason'] = df['occlusion_reason'].str.split(", ").apply(lambda x: ", ".join(sorted(set(item.strip() for item in x))) if isinstance(x, list) else "")
+    #now we have a list of the objects, we want to sort, then concat back together
+
+    return df
+
+def load_and_clean_data(csv_path):
+    df = pd.read_csv(csv_path)
+    df = clean_occlusion_reason(df)
+    df = normalize_occlusion_reasons(df)
+
+    return df
+
+# def confidence_i (i: str, frame_n: str, df):
+#     #input: joint i, frame_n (what frame we are at), df = pd.DataFrame
+#     #output: confidence float for that joint i at frame_n
+
+# def confidence_i_star (i: str, confidence_i: list, optical_flow_i: list, difference_i: float, std: float):
 
 class LightweightTCN(nn.Module): #inherits from nn.Module (PyTorch's base class for neural networks)
 
@@ -79,7 +113,7 @@ class LightweightTCN(nn.Module): #inherits from nn.Module (PyTorch's base class 
             padding = 4
         )
 
-        self.relu = nn.ReLu()
+        self.relu = nn.ReLU()
 
     def forward(self, x, mask = None):
         x = self.relu(self.conv1(x)) #max(0, x), non linear, so can now learn non-linear patterns, sparse, so lots of 0s, saves computation
@@ -101,7 +135,7 @@ def prepare_temporal_data (df, window_size = 16, stride = 8):
     frame_ids = []
     
     # Group by person/track
-    for track_id, group in df.groupby(['instance_id']):
+    for track_id, group in df.groupby([' instance_id']):
         # Sort by frame within this track
         group = group.sort_values('frame_id').reset_index(drop=True)
         
@@ -125,6 +159,60 @@ def prepare_temporal_data (df, window_size = 16, stride = 8):
     return windows, frame_ids
 
 
-def main(csv_path, window_size = 16, stride = 8, verbose = True):
+
+def main(csv_path, window_size=16, stride=8):
+    """
+    Main entry point for Phase 3: Temporal Smoothing.
+    
+    Args:
+        csv_path: path to cleaned CSV
+        window_size: temporal window size
+        stride: sliding window stride
+    """
+    print("=" * 80)
+    print("PHASE 3: TEMPORAL SMOOTHING (Cheng et al. inspired)")
+    print("=" * 80)
+    
+    # Load and clean data
+    print(f"\n1. Loading data from {csv_path}...")
     df = load_and_clean_data(csv_path)
+    print(f"   ✓ Loaded {len(df)} rows")
+    print(f"   ✓ Visibility categories: {df['visibility_category'].unique()}")
+    print(f"   ✓ Unique occlusion reasons: {df['occlusion_reason'].nunique()}")
+    
+    # Inspect cleaned data
+    print(f"\n2. Data quality check:")
+    print(f"   - Total joints: {len(df)}")
+    print(f"   - Visibility distribution:\n{df['visibility_category'].value_counts().sort_index()}")
+    print(f"\n   - Occlusion reason distribution:\n{df['occlusion_reason'].value_counts()}")
+    
+    # Prepare temporal windows
+    print(f"\n3. Preparing temporal windows (window_size={window_size}, stride={stride})...")
+    windows, frame_ids = prepare_temporal_data(df, window_size=window_size, stride=stride)
+    print(f"   ✓ Created {len(windows)} temporal windows")
+    
+    # Initialize model
+    print(f"\n4. Initializing LightweightTCN...")
+    model = LightweightTCN(num_joints=17, hidden_channels=64)
+    print(f"   ✓ Model parameters: {sum(p.numel() for p in model.parameters()):,}")
+    
+    # (Phase 3.1) You can train the model here
+    # (Phase 3.2) Or load pre-trained weights
+    # (Phase 3.3) Or do inference on test set
+    
+    print("\n" + "=" * 80)
+    print("Ready for temporal smoothing experiments!")
+    print("=" * 80)
+    
+    return df, model, windows, frame_ids
+
+
+if __name__ == "__main__":
+    
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data", required=True, help="Path to CSV with annotations")
+    ap.add_argument("--window_size", type=int, default=16, help="Temporal window size")
+    ap.add_argument("--stride", type = int, default = 8)
+    args = ap.parse_args()
+    df, model, windows, frame_ids = main(args.data, args.window_size, args.stride)
 
