@@ -41,7 +41,6 @@ def find_these_fours(df):
     print(df_4.to_string(index = False, justify = 'left', col_space = 0))
 
 
-
 def main(data):
 
     df = pd.read_csv(data)
@@ -119,6 +118,8 @@ def main(data):
         multi_label_examples = df[df['occlusion_reason'].str.contains(',', na=False)]['occlusion_reason'].unique()
         for example in multi_label_examples[:5]:
             print(f"  - {example}")
+
+    return df
 
 
 if __name__ == "__main__":

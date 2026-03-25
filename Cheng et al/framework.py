@@ -28,6 +28,13 @@
 # Final confidence score for p_i = C*_i = C_i * exp(- ||o_i - d_i||^2_2)/(2 * std ^2)
 # If C*_i is smaller than a tuneable threshold p_i is labeled as an occluded keypoint.
 
+import pandas as pd
+import numpy as np
 
+def confidence_i (i: str, frame_n: str, df):
+    #input: joint i, frame_n (what frame we are at), df = pd.DataFrame
+    #output: confidence float for that joint i at frame_n
+
+def confidence_i_star (i: str, confidence_i: list, optical_flow_i: list, difference_i: float, std: float):
 
 
