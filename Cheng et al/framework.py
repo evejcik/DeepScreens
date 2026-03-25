@@ -92,6 +92,37 @@ class LightweightTCN(nn.Module): #inherits from nn.Module (PyTorch's base class 
         
         return x
 
+def prepare_temporal_data (df, window_size = 16, stride = 8):
+    #output should look like, per every 16 frames, per person:
+    #[(confidence for joint 0, frame 1), (confidence for joint 1, frame 1), ..., (confidence for joint 16, frame 1)]
+    #,...,
+    #[(confidence for joint 0, frame 16), (confidence for joint 1, frame 16), ..., (confidence for joint 16, frame 16)]
+    windows = []
+    frame_ids = []
+    
+    # Group by person/track
+    for track_id, group in df.groupby(['instance_id']):
+        # Sort by frame within this track
+        group = group.sort_values('frame_id').reset_index(drop=True)
+        
+        # Pivot: rows=frames, cols=joints
+        pivot = group.pivot_table(
+            index='frame_id',
+            columns='joint_id',
+            values=['mmpose_confidence', 'visibility_category', 'occlusion_severity'],
+            aggfunc='first'
+        )
+        
+        num_frames = len(pivot)
+        
+        # Sliding window over this person's sequence
+        for start in range(0, num_frames - window_size + 1, stride):
+            end = start + window_size
+            window_data = pivot.iloc[start:end]
+            windows.append(window_data)
+            frame_ids.append(pivot.index[start:end].tolist())
+    
+    return windows, frame_ids
 
 
 def main(csv_path, window_size = 16, stride = 8, verbose = True):
