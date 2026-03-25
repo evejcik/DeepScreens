@@ -4,7 +4,7 @@
 # produce a complete 3D pose. By using incomplete 2D keypoints, instead of complete but incorrect ones, our networks
 # are less affected by the error-prone estimations of occluded keypoints.
 
-# General framework:
+# General framework:semi-supervised method
 # Human Detection & Keypoints Estimation (done)
 # Temporal Convolution for 2D pose
 # Temporal Convolution for 3D pose
@@ -17,4 +17,4 @@
 # (2D and 3D TCNs respecively) to enforce temporal smoothness.
 
 # The 3D TCN takes potentially incomplete 2D keypoints as input, and requires pairs of a 3D pose and a 2D pose with occlusion labels during training. 
-# 
+# We also add in a pose regularization term to penalize violations of keypoints that are estimated as unoccluded, contradicting the ground-truth labels.
