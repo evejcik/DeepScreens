@@ -2,21 +2,7 @@ import pandas as pd
 import numpy as np
 
 import argparse
-
-def clean_occlusion_reason(df):
-    #this is for when the visibility_category is 3 or 5 -> then there is no occlusion reason, so need to replace the blanks to prevent crashes
-
-    df['occlusion_reason'] = df['occlusion_reason'].astype(str) #makes sure object is treated as string, handles NaNs
-
-    # df.loc[~df['visibility_category'].isin([2.0, 4.0, 5.0]), 'occlusion_reason'] = "None"
-
-    df.loc[df['visibility_category'] == 3.0, 'occlusion_reason'] = "off screen"
-    df.loc[df['visibility_category'] == 1.0, 'occlusion_reason'] = 'visible'
-    df.loc[df['visibility_category'] == 4.0, 'occlusion_reason'] = 'confused, too ambiguous'
-
-    df.loc[df['occlusion_reason'].isna() | (df['occlusion_reason'] == 'nan'), 'occlusion_reason'] = "None" #just doing some double checking cleaning
-
-    return df
+from data_loader import load_and_clean_data
 
 
 def find_nulls_in_occlusion_reason(df):

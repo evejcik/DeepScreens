@@ -31,10 +31,33 @@
 import pandas as pd
 import numpy as np
 
+from data_loader import load_and_clean_data
+
 def confidence_i (i: str, frame_n: str, df):
     #input: joint i, frame_n (what frame we are at), df = pd.DataFrame
     #output: confidence float for that joint i at frame_n
 
 def confidence_i_star (i: str, confidence_i: list, optical_flow_i: list, difference_i: float, std: float):
 
+class LightweightTCN(nn.Module):
 
+    def __init__(self, num_joints = 17, hidden_channels = 64): #by default, we have 17 (COCO) joints, but the user can change this if they want.
+        #by default, our internal representation uses 64 channels, but again, this is changeable
+        super().__init__()
+
+    self.conv1 = nn.Conv1d( #takes in a 1D sequence, just a list of numbers, and slides a 1D filter over it, producing ianother 1D sequence
+        num_joints, hidden_channels,
+        kernel_size = 5, dilation = 1, padding = 2
+    )
+
+    self.conv2 = nn.Conv1d( #
+        hidden_channels, hidden_channels,
+        kernel_size = 5, dilation = 2, padding = 4
+    )
+
+    self.tconv1 = nn.ConvTranspose1d(
+        hidden_channels, hidden_channels,
+        kernel_size = 5, dilation = 1, padding = 2
+    )
+
+    self.tconv2 = nn.Conv
