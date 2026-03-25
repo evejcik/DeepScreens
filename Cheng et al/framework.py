@@ -39,25 +39,60 @@ def confidence_i (i: str, frame_n: str, df):
 
 def confidence_i_star (i: str, confidence_i: list, optical_flow_i: list, difference_i: float, std: float):
 
-class LightweightTCN(nn.Module):
+class LightweightTCN(nn.Module): #inherits from nn.Module (PyTorch's base class for neural networks)
 
     def __init__(self, num_joints = 17, hidden_channels = 64): #by default, we have 17 (COCO) joints, but the user can change this if they want.
         #by default, our internal representation uses 64 channels, but again, this is changeable
-        super().__init__()
+        super().__init__() #do the initialization that nn.Module needs to do, then do my custom initialization for LightweightTCN
 
-    self.conv1 = nn.Conv1d( #takes in a 1D sequence, just a list of numbers, and slides a 1D filter over it, producing ianother 1D sequence
-        num_joints, hidden_channels,
-        kernel_size = 5, dilation = 1, padding = 2
-    )
+        self.conv1 = nn.Conv1d( 
+            # Take 17 joints over 16 frames. Look at each 5-frame window. Learn how to combine those joints into 64 new features. Output 64 features for all 16 frames.
+            
+            #takes in a 1D sequence, just a list of numbers, and slides a 1D filter over it, producing another 1D sequence
+            num_joints, #input channels = num_joints = 17
+            hidden_channels, #output channels = hidden_channels = 64 (internal representation)
+            kernel_size = 5, #filter length, looks at 5 consecutive frames at a time
+            dilation = 1, #stride of 1, normal, no skipping
+            padding = 2 #adds padding on both sides so that output is the same size as the input
+            #output: batch_size, 64 channels, 16 frames
+        )
 
-    self.conv2 = nn.Conv1d( #
-        hidden_channels, hidden_channels,
-        kernel_size = 5, dilation = 2, padding = 4
-    )
+        self.conv2 = nn.Conv1d( 
+            hidden_channels, #input: 64 channels, 16 frames
+            hidden_channels, #output: 64 channels, 16 frames
+            kernel_size = 5, #still looking at 5 frames at a time
+            dilation = 2, #but now looking at every other frame
+            padding = 4
+        )
 
-    self.tconv1 = nn.ConvTranspose1d(
-        hidden_channels, hidden_channels,
-        kernel_size = 5, dilation = 1, padding = 2
-    )
+        self.tconv1 = nn.ConvTranspose1d(
+            hidden_channels, #64 channels, 16 frames, etc.
+            hidden_channels,
+            kernel_size = 5, dilation = 1, padding = 2
+        )
 
-    self.tconv2 = nn.Conv
+        self.tconv2 = nn.ConvTranspose1d(
+            hidden_channels,
+            num_joints,
+            kernel_size = 5,
+            dilation = 2,
+            padding = 4
+        )
+
+        self.relu = nn.ReLu()
+
+    def forward(self, x, mask = None):
+        x = self.relu(self.conv1(x))
+        x = self.relu(self.conv2(x))
+        x = self.relu(self.tconv1(x))
+        x = torch.sigmoid(self.tconv2(x))
+
+        if mask is not None:
+            x = x * mask + (1 - mask) * x.detach()
+        
+        return x
+
+
+def main(csv_path, window_size = 16, stride = 8, verbose = True):
+    df = load_and_clean_data(csv_path)
+
