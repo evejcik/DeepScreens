@@ -20,4 +20,25 @@ def normalize_occlusion_reasons(df):
     #makes occlusion_reason order-invariant
     #Example: "self_occlusion, external_object" == "external_object, self_occlusion"
 
-    df["occlusion_reason"] = df["occlusion_reason"].str.split(' ')
+    df['occlusion_reason'] = df['occlusion_reason'].str.split(", ").apply(lambda x: ", ".join(sort(set(item.strip() for item in x))) if isinstance(x, list) else "")
+    #now we have a list of the objects, we want to sort, then concat back together
+
+    return df
+
+def load_and_clean_data(csv_path):
+    df = pd.read_csv(csv_path)
+    df = clean_occlusion_reason(df)
+    df = normalize_occlusion_reasons(df)
+
+    return df
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1:
+        df = load_and_clean_data(sys.argv[1])
+        print(f"Loaded {len(df)} rows")
+        print(f"Visibility categories: {df['visibility_category'].unique()}")
+        print(f"Unique occlusion reasons: {df['occlusion_reason'].nunique()}")
+
+    else: 
+        print("Usage: python data_loader.py <path_to_csv>")
