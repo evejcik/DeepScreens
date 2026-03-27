@@ -1163,9 +1163,10 @@
     // ============================================================================
     const TOTAL_ANNOTATIONS_NEEDED = 50;
     const ANNOTATIONS_PER_INSTANCE = 25;
-    const FPS = 30;
+    const FPS = 30;                     // <<--- keep the same FPS you use elsewhere
+
     // ============================================================================
-    // MTurk PARAMETER EXTRACTION
+    // MTURK PARAMETER EXTRACTION
     // ============================================================================
     function getMTurkParameter(param) {
         const urlParams = new URLSearchParams(window.location.search);
@@ -1184,6 +1185,7 @@
             document.getElementById('mturk-form').action = turkSubmitTo + '/mturk/externalSubmitToServer';
         }
     }
+
     // ============================================================================
     // COMPLETION CODE GENERATION
     // ============================================================================
@@ -1201,6 +1203,7 @@
             alert('Could not copy. Please manually select and copy the code.');
         });
     }
+
     // ============================================================================
     // RANDOM FRAME START
     // ============================================================================
@@ -1223,19 +1226,17 @@
             video.pause();
         }
     }
+
     // ============================================================================
     // RULES PANEL TABS
     // ============================================================================
     function switchTab(tabName) {
-        document.querySelectorAll('.rules-content').forEach(el => {
-            el.classList.remove('active');
-        });
-        document.querySelectorAll('.rules-tab').forEach(el => {
-            el.classList.remove('active');
-        });
+        document.querySelectorAll('.rules-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.rules-tab').forEach(el => el.classList.remove('active'));
         document.getElementById(tabName).classList.add('active');
         event.target.classList.add('active');
     }
+
     // ============================================================================
     // STATE MANAGEMENT
     // ============================================================================
@@ -1253,10 +1254,10 @@
         annotations: [],
         completionCode: null
     };
+
     // ============================================================================
-    // FRAME-AWARE ANNOTATION TRACKING (SMART FEATURE)
+    // FRAME‑AWARE ANNOTATION TRACKING (SMART FEATURE)
     // ============================================================================
-    // Create unique identifier for current frame/instance/joint combo
     function getFrameId() {
         const frameNumber = parseInt(document.getElementById('frameNumber').textContent.split(': ')[1]);
         const instance = state.selectedInstance;
@@ -1264,7 +1265,6 @@
         if (instance === null || !joint) return null;
         return `frame_${frameNumber}_instance_${instance}_joint_${joint}`;
     }
-    // Find if this frame/instance/joint already has an annotation
     function findAnnotationIndex() {
         const frameId = getFrameId();
         if (!frameId) return -1;
@@ -1273,65 +1273,66 @@
             return annFrameId === frameId;
         });
     }
-    // Load saved annotation when user selects a frame/instance/joint combo
     function loadAnnotationIfExists() {
         const frameId = getFrameId();
         if (!frameId) return;
         const existingIndex = findAnnotationIndex();
         if (existingIndex !== -1) {
-            // Found existing annotation - load it into the form
             const existing = state.annotations[existingIndex];
-            // Set confidence slider
+            // ---- restore everything -------------------------------------------------
             document.getElementById('confidenceSlider').value = existing.confidence;
             state.confidenceLevel = existing.confidence;
-            document.getElementById('confidenceText').textContent = getConfidenceLabel(existing.confidence);
+            document.getElementById('confidenceText').textContent = confidenceLabels[existing.confidence];
             document.getElementById('confidenceDefinition').innerHTML = confidenceDefinitions[existing.confidence];
-            // Select category
+
             document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
-            const categoryBtn = document.querySelector(`.category-btn[data-category="${existing.category}"]`);
-            if (categoryBtn) {
-                categoryBtn.classList.add('active');
-            }
-            // Load low confidence reasons
+            const catBtn = document.querySelector(`.category-btn[data-category="${existing.category}"]`);
+            if (catBtn) catBtn.classList.add('active');
+
+            // low‑confidence reasons (multi‑select)
             document.querySelectorAll('.low-confidence-btn').forEach(b => b.classList.remove('active'));
             if (existing.lowConfidenceReasons) {
-                existing.lowConfidenceReasons.forEach(reason => {
-                    const btn = document.querySelector(`.low-confidence-btn[data-reason="${reason}"]`);
+                existing.lowConfidenceReasons.forEach(r => {
+                    const btn = document.querySelector(`.low-confidence-btn[data-reason="${r}"]`);
                     if (btn) btn.classList.add('active');
                 });
             }
-            // Load occlusion details if present
+
+            // occlusion severity / reason
             document.querySelectorAll('.severity-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
+
             if (existing.severity !== undefined && existing.severity !== null) {
-                const severityBtn = document.querySelector(`.severity-btn[data-severity="${existing.severity}"]`);
-                if (severityBtn) severityBtn.classList.add('active');
+                const sevBtn = document.querySelector(`.severity-btn[data-severity="${existing.severity}"]`);
+                if (sevBtn) sevBtn.classList.add('active');
             }
             if (existing.reason) {
-                const reasonBtn = document.querySelector(`.reason-btn[data-reason="${existing.reason}"]`);
-                if (reasonBtn) reasonBtn.classList.add('active');
+                const reasBtn = document.querySelector(`.reason-btn[data-reason="${existing.reason}"]`);
+                if (reasBtn) reasBtn.classList.add('active');
             }
-            // Show/hide occlusion section
-            if (existing.category === 'occluded') {
+
+            // show / hide conditional sections
+            if (existing.category === 'occluded')
                 document.getElementById('occludedSection').classList.add('show');
-            } else {
+            else
                 document.getElementById('occludedSection').classList.remove('show');
-            }
-            // Show/hide low confidence section
-            if (existing.confidence <= 3) {
+
+            if (existing.confidence <= 3)
                 document.getElementById('lowConfidenceSection').classList.add('show');
-            } else {
+            else
                 document.getElementById('lowConfidenceSection').classList.remove('show');
-            }
+
             updateSummary();
         }
     }
+
     // ============================================================================
     // VIDEO PLAYER FUNCTIONALITY
     // ============================================================================
     const video = document.getElementById('videoPlayer');
     const frameNumberDisplay = document.getElementById('frameNumber');
-    const frameTimeDisplay = document.getElementById('frameTime');
+    const frameTimeDisplay   = document.getElementById('frameTime');
+
     function updateFrameInfo() {
         const currentTime = video.currentTime;
         const frameNumber = Math.floor(currentTime * FPS);
@@ -1339,36 +1340,66 @@
         const seconds = Math.floor(currentTime % 60);
         const milliseconds = Math.floor((currentTime % 1) * 100);
         frameNumberDisplay.textContent = `Frame: ${frameNumber}`;
-        frameTimeDisplay.textContent = `${minutes}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(2, '0')}`;
-        // Update form when frame changes
+        frameTimeDisplay.textContent   = `${minutes}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(2, '0')}`;
+
+        // When the user has already chosen instance + joint, try to preload any saved annotation
         if (state.selectedInstance !== null && state.selectedJoint) {
             loadAnnotationIfExists();
         }
     }
+
     video.addEventListener('timeupdate', updateFrameInfo);
     video.addEventListener('loadedmetadata', updateFrameInfo);
-    // function togglePlayPause() {
-    //     const btn = document.getElementById('playPauseBtn');
-    //     if (video.paused) {
-    //         video.play();
-    //         btn.textContent = '⏸ Pause';
-    //     } else {
-    //         video.pause();
-    //         btn.textContent = '▶ Play';
-    //     }
-    // }
+
+    // --------------------------------------------------------------
+    // **NEW SECTION – FAST, FPS‑matched frame counter**
+    // --------------------------------------------------------------
+    let frameCounterTimer = null;                // holds the setInterval ID
+
+    function startFrameCounter() {
+        if (frameCounterTimer) return;           // already running
+        frameCounterTimer = setInterval(updateFrameInfo, 1000 / FPS);
+    }
+    function stopFrameCounter() {
+        if (frameCounterTimer) {
+            clearInterval(frameCounterTimer);
+            frameCounterTimer = null;
+        }
+    }
+
+    // Hook the start/stop logic to the video’s native events
+    video.addEventListener('play',    () => { startFrameCounter(); });
+    video.addEventListener('pause',   () => { stopFrameCounter();   updateFrameInfo(); });
+    video.addEventListener('seeking', () => { updateFrameInfo(); });
+    video.addEventListener('ended',   () => { stopFrameCounter();   updateFrameInfo(); });
+
+    // --------------------------------------------------------------
+    // NAVIGATION BUTTONS (prev / next frame)
+    // --------------------------------------------------------------
     function nextFrame() {
         video.currentTime += 1 / FPS;
-        video.pause();
-        // document.getElementById('playPauseBtn').textContent = '▶ Play';
+        video.pause();                 // always pause after a step‑forward
     }
     function previousFrame() {
         video.currentTime -= 1 / FPS;
-        video.pause();
-        // document.getElementById('playPauseBtn').textContent = '▶ Play';
+        video.pause();                 // always pause after a step‑backward
     }
+
+    // (If you still have a Play/Pause button, keep this handler – the
+    //  start/stop logic is now handled by the listeners above)
+    function togglePlayPause() {
+        const btn = document.getElementById('playPauseBtn');
+        if (video.paused) {
+            video.play();               // → triggers 'play' → startFrameCounter()
+            btn.textContent = '⏸ Pause';
+        } else {
+            video.pause();              // → triggers 'pause' → stopFrameCounter()
+            btn.textContent = '▶ Play';
+        }
+    }
+
     // ============================================================================
-    // CONFIDENCE DEFINITIONS
+    // CONFIDENCE DEFINITIONS & LABELS
     // ============================================================================
     const confidenceDefinitions = {
         1: '<strong>Guessing:</strong> Very low confidence. You\'re barely confident in your classification.',
@@ -1384,57 +1415,55 @@
         4: '4 - Fairly Sure',
         5: '5 - Certain'
     };
-    function getConfidenceLabel(value) {
-        return confidenceLabels[value];
-    }
+    function getConfidenceLabel(v){ return confidenceLabels[v]; }
+
     // ============================================================================
     // INSTANCE SELECTION
     // ============================================================================
     document.querySelectorAll('.instance-btn').forEach(btn => {
-        btn.addEventListener('click', function (e) {
+        btn.addEventListener('click', function(e){
             e.preventDefault();
-            document.querySelectorAll('.instance-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.instance-btn').forEach(b=>b.classList.remove('active'));
             this.classList.add('active');
             state.selectedInstance = this.dataset.instance;
-            // Try to load annotation if joint is also selected
-            if (state.selectedJoint) {
-                loadAnnotationIfExists();
-            }
+            if (state.selectedJoint) loadAnnotationIfExists();
         });
     });
+
     // ============================================================================
     // JOINT SELECTION
     // ============================================================================
     document.querySelectorAll('.joint-btn').forEach(btn => {
-        btn.addEventListener('click', function (e) {
+        btn.addEventListener('click', function(e){
             e.preventDefault();
-            document.querySelectorAll('.joint-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.joint-btn').forEach(b=>b.classList.remove('active'));
             this.classList.add('active');
             state.selectedJoint = this.dataset.joint;
-            // Try to load annotation if instance is also selected
-            if (state.selectedInstance !== null) {
-                loadAnnotationIfExists();
-            }
+            if (state.selectedInstance !== null) loadAnnotationIfExists();
         });
     });
+
     // ============================================================================
     // CATEGORY SELECTION
     // ============================================================================
     document.querySelectorAll('.category-btn').forEach(btn => {
-        btn.addEventListener('click', function (e) {
+        btn.addEventListener('click', function(e){
             e.preventDefault();
-            document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.category-btn').forEach(b=>b.classList.remove('active'));
             this.classList.add('active');
             state.selectedCategory = this.dataset.category;
+
+            // Ambiguous forces confidence = 1 & disables the slider
             if (state.selectedCategory === 'ambiguous') {
-                document.getElementById('confidenceSlider').value = 1;
+                confidenceSlider.value = 1;
                 state.confidenceLevel = 1;
-                document.getElementById('confidenceText').textContent = '1 - Guessing (Ambiguous)';
-                document.getElementById('confidenceSlider').disabled = true;
-                updateConfidenceSection();
+                confidenceText.textContent = '1 - Guessing (Ambiguous)';
+                confidenceSlider.disabled = true;
             } else {
-                document.getElementById('confidenceSlider').disabled = false;
+                confidenceSlider.disabled = false;
             }
+
+            // Show / hide the occlusion‑specific block
             const occludedSection = document.getElementById('occludedSection');
             if (state.selectedCategory === 'occluded') {
                 occludedSection.classList.add('show');
@@ -1442,45 +1471,49 @@
                 occludedSection.classList.remove('show');
                 state.occlusion.severity = null;
                 state.occlusion.reason = null;
-                document.querySelectorAll('.severity-btn').forEach(b => b.classList.remove('active'));
-                document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.severity-btn').forEach(b=>b.classList.remove('active'));
+                document.querySelectorAll('.reason-btn').forEach(b=>b.classList.remove('active'));
             }
             updateSummary();
         });
     });
+
     // ============================================================================
     // CONFIDENCE SLIDER
     // ============================================================================
     const confidenceSlider = document.getElementById('confidenceSlider');
-    const confidenceText = document.getElementById('confidenceText');
+    const confidenceText   = document.getElementById('confidenceText');
     const confidenceDefinition = document.getElementById('confidenceDefinition');
+
     function updateConfidenceSection() {
-        const lowConfidenceSection = document.getElementById('lowConfidenceSection');
+        const lowConf = document.getElementById('lowConfidenceSection');
         if (state.confidenceLevel <= 3) {
-            lowConfidenceSection.classList.add('show');
+            lowConf.classList.add('show');
         } else {
-            lowConfidenceSection.classList.remove('show');
+            lowConf.classList.remove('show');
             state.lowConfidenceReasons = [];
-            document.querySelectorAll('.low-confidence-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.low-confidence-btn').forEach(b=>b.classList.remove('active'));
         }
     }
-    confidenceSlider.addEventListener('input', function () {
+
+    confidenceSlider.addEventListener('input', function(){
         state.confidenceLevel = parseInt(this.value);
         confidenceText.textContent = confidenceLabels[state.confidenceLevel];
         confidenceDefinition.innerHTML = confidenceDefinitions[state.confidenceLevel];
         updateConfidenceSection();
         updateSummary();
     });
+
     // ============================================================================
-    // LOW CONFIDENCE REASONS (Multi-select)
+    // LOW CONFIDENCE REASONS (multi‑select)
     // ============================================================================
     document.querySelectorAll('.low-confidence-btn').forEach(btn => {
-        btn.addEventListener('click', function (e) {
+        btn.addEventListener('click', function(e){
             e.preventDefault();
             const reason = this.dataset.reason;
             if (this.classList.contains('active')) {
                 this.classList.remove('active');
-                state.lowConfidenceReasons = state.lowConfidenceReasons.filter(r => r !== reason);
+                state.lowConfidenceReasons = state.lowConfidenceReasons.filter(r=>r!==reason);
             } else {
                 this.classList.add('active');
                 state.lowConfidenceReasons.push(reason);
@@ -1488,167 +1521,149 @@
             updateSummary();
         });
     });
+
     // ============================================================================
     // OCCLUSION SEVERITY
     // ============================================================================
     document.querySelectorAll('.severity-btn').forEach(btn => {
-        btn.addEventListener('click', function (e) {
+        btn.addEventListener('click', function(e){
             e.preventDefault();
-            document.querySelectorAll('.severity-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.severity-btn').forEach(b=>b.classList.remove('active'));
             this.classList.add('active');
             state.occlusion.severity = this.dataset.severity;
             updateSummary();
         });
     });
+
     // ============================================================================
     // OCCLUSION REASON
     // ============================================================================
     document.querySelectorAll('.reason-btn').forEach(btn => {
-        btn.addEventListener('click', function (e) {
+        btn.addEventListener('click', function(e){
             e.preventDefault();
-            document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.reason-btn').forEach(b=>b.classList.remove('active'));
             this.classList.add('active');
             state.occlusion.reason = this.dataset.reason;
             updateSummary();
         });
     });
+
     // ============================================================================
-    // FORM SUBMISSION & VALIDATION
+    // FORM VALIDATION & SUBMIT
     // ============================================================================
     function validateForm() {
         const errors = [];
-        if (state.selectedInstance === null) {
-            errors.push('Please select an instance (0 or 1).');
-        }
-        if (!state.selectedJoint) {
-            errors.push('Please select a joint.');
-        }
-        if (!state.selectedCategory) {
-            errors.push('Please select a visibility category.');
-        }
-        if (state.confidenceLevel <= 3 && state.lowConfidenceReasons.length === 0) {
-            errors.push('Please select at least one reason for low confidence.');
-        }
+        if (state.selectedInstance === null) errors.push('Please select an instance (0 or 1).');
+        if (!state.selectedJoint)               errors.push('Please select a joint.');
+        if (!state.selectedCategory)            errors.push('Please select a visibility category.');
+        if (state.confidenceLevel <= 3 && state.lowConfidenceReasons.length===0)
+            errors.push('Select at least one low‑confidence reason.');
         if (state.selectedCategory === 'occluded') {
-            if (state.occlusion.severity === null) {
-                errors.push('Please select occlusion severity.');
-            }
-            if (!state.occlusion.reason) {
-                errors.push('Please select occlusion reason.');
-            }
+            if (state.occlusion.severity===null) errors.push('Select occlusion severity.');
+            if (!state.occlusion.reason)          errors.push('Select occlusion reason.');
         }
         return errors;
     }
-    function showValidationMessage(message, isError = true) {
-        const msgEl = document.getElementById('validationMessage');
-        msgEl.textContent = message;
-        msgEl.classList.remove('error', 'success');
-        msgEl.classList.add(isError ? 'error' : 'success');
-        msgEl.scrollIntoView({ behavior: 'smooth' });
+    function showValidationMessage(msg, isError=true){
+        const el = document.getElementById('validationMessage');
+        el.textContent = msg;
+        el.classList.remove('error','success');
+        el.classList.add(isError ? 'error' : 'success');
+        el.scrollIntoView({behavior:'smooth'});
     }
+
     function updateSummary() {
-        const summary = document.getElementById('annotationSummary');
-        let summaryText = '';
+        const sum = document.getElementById('annotationSummary');
+        let txt = '';
         if (state.selectedInstance !== null) {
-            const instanceLabel = state.selectedInstance === '0' ? '⬜ Instance 0' : '🟨 Instance 1';
-            summaryText += `<strong>Instance:</strong> ${instanceLabel}<br>`;
+            const label = state.selectedInstance==='0' ? '⬜ Instance 0' : '🟨 Instance 1';
+            txt += `<strong>Instance:</strong> ${label}<br>`;
         }
-        if (state.selectedJoint) {
-            summaryText += `<strong>Joint:</strong> ${state.selectedJoint.replace(/_/g, ' ')}<br>`;
-        }
+        if (state.selectedJoint) txt += `<strong>Joint:</strong> ${state.selectedJoint.replace(/_/g,' ')}<br>`;
         if (state.selectedCategory) {
-            let categoryDisplay = state.selectedCategory.replace(/_/g, ' ');
-            if (state.selectedCategory === 'ambiguous') {
-                categoryDisplay += ' (Auto Confidence: 1)';
-            }
-            summaryText += `<strong>Category:</strong> ${categoryDisplay}<br>`;
+            let cat = state.selectedCategory.replace(/_/g,' ');
+            if (state.selectedCategory==='ambiguous') cat += ' (Auto Confidence: 1)';
+            txt += `<strong>Category:</strong> ${cat}<br>`;
         }
-        summaryText += `<strong>Confidence:</strong> ${confidenceLabels[state.confidenceLevel]}<br>`;
-        if (state.confidenceLevel <= 3 && state.lowConfidenceReasons.length > 0) {
-            summaryText += `<strong>Reasons:</strong> ${state.lowConfidenceReasons.map(r => r.replace(/_/g, ' ')).join(', ')}<br>`;
+        txt += `<strong>Confidence:</strong> ${confidenceLabels[state.confidenceLevel]}<br>`;
+        if (state.confidenceLevel <= 3 && state.lowConfidenceReasons.length)
+            txt += `<strong>Reasons:</strong> ${state.lowConfidenceReasons.map(r=>r.replace(/_/g,' ')).join(', ')}<br>`;
+        if (state.selectedCategory==='occluded') {
+            if (state.occlusion.severity!==null) txt += `<strong>Severity:</strong> ${state.occlusion.severity}<br>`;
+            if (state.occlusion.reason)          txt += `<strong>Reason:</strong> ${state.occlusion.reason.replace(/_/g,' ')}<br>`;
         }
-        if (state.selectedCategory === 'occluded') {
-            if (state.occlusion.severity !== null) {
-                summaryText += `<strong>Severity:</strong> ${state.occlusion.severity}<br>`;
-            }
-            if (state.occlusion.reason) {
-                summaryText += `<strong>Reason:</strong> ${state.occlusion.reason.replace(/_/g, ' ')}<br>`;
-            }
-        }
-        if (summaryText) {
-            summary.innerHTML = summaryText;
-            summary.classList.add('show');
+        if (txt) {
+            sum.innerHTML = txt;
+            sum.classList.add('show');
         } else {
-            summary.classList.remove('show');
+            sum.classList.remove('show');
         }
     }
+
     function updateProgress() {
-        const total = state.annotations.length;
-        const instance0Count = state.annotations.filter(a => a.instance === '0').length;
-        const instance1Count = state.annotations.filter(a => a.instance === '1').length;
+        const total   = state.annotations.length;
+        const i0      = state.annotations.filter(a=>a.instance==='0').length;
+        const i1      = state.annotations.filter(a=>a.instance==='1').length;
         const remaining = Math.max(0, TOTAL_ANNOTATIONS_NEEDED - total);
-        const percentage = (total / TOTAL_ANNOTATIONS_NEEDED) * 100;
-        const progressBar = document.getElementById('progressBar');
-        progressBar.style.width = Math.min(percentage, 100) + '%';
-        document.getElementById('progressPercent').textContent = Math.floor(percentage) + '%';
+        const percent = (total / TOTAL_ANNOTATIONS_NEEDED) * 100;
+
+        document.getElementById('progressBar').style.width = Math.min(percent,100)+'%';
+        document.getElementById('progressPercent').textContent = Math.floor(percent)+'%';
         document.getElementById('progressText').textContent = `${total} / ${TOTAL_ANNOTATIONS_NEEDED} annotations`;
         document.getElementById('totalCount').textContent = total;
-        document.getElementById('instance0Count').textContent = instance0Count;
-        document.getElementById('instance1Count').textContent = instance1Count;
+        document.getElementById('instance0Count').textContent = i0;
+        document.getElementById('instance1Count').textContent = i1;
         document.getElementById('remaining').textContent = remaining;
+
         const submitBtn = document.getElementById('submitBtn');
-        if (total >= TOTAL_ANNOTATIONS_NEEDED &&
-            instance0Count >= ANNOTATIONS_PER_INSTANCE &&
-            instance1Count >= ANNOTATIONS_PER_INSTANCE) {
+        if (total >= TOTAL_ANNOTATIONS_NEEDED && i0 >= ANNOTATIONS_PER_INSTANCE && i1 >= ANNOTATIONS_PER_INSTANCE)
             submitBtn.disabled = false;
-        } else {
+        else
             submitBtn.disabled = true;
-        }
+
         submitBtn.textContent = `✓ Complete Task (${total}/${TOTAL_ANNOTATIONS_NEEDED})`;
     }
-    // ============================================================================
+
+    // ----------------------------------------------------------------
     // FORM SUBMISSION (WITH SMART FRAME UPDATES)
-    // ============================================================================
-    document.getElementById('annotationForm').addEventListener('submit', function (e) {
+    // ----------------------------------------------------------------
+    document.getElementById('annotationForm').addEventListener('submit', function(e){
         e.preventDefault();
         const errors = validateForm();
-        if (errors.length > 0) {
+        if (errors.length) {
             showValidationMessage(errors.join(' '), true);
             return;
         }
+
         const annotation = {
             instance: state.selectedInstance,
-            joint: state.selectedJoint,
+            joint:    state.selectedJoint,
             category: state.selectedCategory,
             confidence: state.confidenceLevel,
-            frame: parseInt(document.getElementById('frameNumber').textContent.split(': ')[1]),
+            frame:   parseInt(document.getElementById('frameNumber').textContent.split(': ')[1]),
             timestamp: video.currentTime,
-            ...(state.confidenceLevel <= 3 && {
-                lowConfidenceReasons: state.lowConfidenceReasons
-            }),
-            ...(state.selectedCategory === 'occluded' && {
-                severity: state.occlusion.severity,
-                reason: state.occlusion.reason
-            })
+            ...(state.confidenceLevel <= 3 && { lowConfidenceReasons: state.lowConfidenceReasons }),
+            ...(state.selectedCategory === 'occluded' && { severity: state.occlusion.severity, reason: state.occlusion.reason })
         };
-        // Check if this frame/instance/joint combo already exists
-        const existingIndex = findAnnotationIndex();
-        if (existingIndex !== -1) {
-            // UPDATE existing annotation
-            state.annotations[existingIndex] = annotation;
+
+        const existingIdx = findAnnotationIndex();
+        if (existingIdx !== -1) {
+            state.annotations[existingIdx] = annotation;
             showValidationMessage('✓ Annotation updated!', false);
         } else {
-            // ADD new annotation
             state.annotations.push(annotation);
-            showValidationMessage('✓ Annotation saved! Moving to next frame...', false);
+            showValidationMessage('✓ Annotation saved! Moving to next frame…', false);
         }
+
         state.frameSaved = true;
         updateProgress();
+
         setTimeout(() => {
             clearForm();
             nextFrame();
         }, 800);
     });
+
     function clearForm() {
         state.selectedInstance = null;
         state.selectedJoint = null;
@@ -1657,59 +1672,57 @@
         state.lowConfidenceReasons = [];
         state.occlusion.severity = null;
         state.occlusion.reason = null;
-        document.querySelectorAll('.instance-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.joint-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.severity-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.low-confidence-btn').forEach(b => b.classList.remove('active'));
+
+        document.querySelectorAll('.instance-btn,.joint-btn,.category-btn,.severity-btn,.reason-btn,.low-confidence-btn')
+                .forEach(b=>b.classList.remove('active'));
+
         confidenceSlider.value = 4;
         confidenceSlider.disabled = false;
         confidenceText.textContent = '4 - Fairly Sure';
         confidenceDefinition.innerHTML = confidenceDefinitions[4];
-        document.getElementById('occludedSection').classList.remove('show');
-        document.getElementById('lowConfidenceSection').classList.remove('show');
-        document.getElementById('annotationSummary').classList.remove('show');
-        document.getElementById('validationMessage').classList.remove('error', 'success');
+
+        document.getElementById('occludedSection')      .classList.remove('show');
+        document.getElementById('lowConfidenceSection') .classList.remove('show');
+        document.getElementById('annotationSummary')    .classList.remove('show');
+        document.getElementById('validationMessage')    .classList.remove('error','success');
         updateSummary();
     }
-    // ============================================================================
+
+    // ----------------------------------------------------------------
     // MTURK SUBMISSION
-    // ============================================================================
+    // ----------------------------------------------------------------
     function submitToMTurk() {
-        const instance0Count = state.annotations.filter(a => a.instance === '0').length;
-        const instance1Count = state.annotations.filter(a => a.instance === '1').length;
+        const i0 = state.annotations.filter(a=>a.instance==='0').length;
+        const i1 = state.annotations.filter(a=>a.instance==='1').length;
         const total = state.annotations.length;
+
         if (total < TOTAL_ANNOTATIONS_NEEDED ||
-            instance0Count < ANNOTATIONS_PER_INSTANCE ||
-            instance1Count < ANNOTATIONS_PER_INSTANCE) {
-            alert(`Please complete at least ${TOTAL_ANNOTATIONS_NEEDED} annotations.\nInstance 0: ${instance0Count}/${ANNOTATIONS_PER_INSTANCE}\nInstance 1: ${instance1Count}/${ANNOTATIONS_PER_INSTANCE}`);
+            i0 < ANNOTATIONS_PER_INSTANCE ||
+            i1 < ANNOTATIONS_PER_INSTANCE) {
+            alert(`Please finish the required annotations:\nInstance 0: ${i0}/${ANNOTATIONS_PER_INSTANCE}\nInstance 1: ${i1}/${ANNOTATIONS_PER_INSTANCE}\nTotal: ${total}/${TOTAL_ANNOTATIONS_NEEDED}`);
             return;
         }
-        // Generate completion code
+
+        // ----- generate completion code ---------------------------------
         state.completionCode = generateCompletionCode();
         document.getElementById('completion-code').value = state.completionCode;
         document.getElementById('completionCodeText').textContent = state.completionCode;
-        // Show completion code section
         document.getElementById('completionCodeSection').classList.add('show');
         document.getElementById('submitBtn').style.display = 'none';
-        // Show success message
-        showValidationMessage('✓ All annotations complete! Copy the code below.', false);
-        // Populate annotations data
-        const annotationsJson = JSON.stringify(state.annotations, null, 2);
-        document.getElementById('annotations-data').value = annotationsJson;
-        console.log('Task completed!');
-        console.log('Completion code:', state.completionCode);
-        console.log('Total annotations:', state.annotations.length);
+
+        // ----- dump the annotations --------------------------------------
+        document.getElementById('annotations-data').value = JSON.stringify(state.annotations, null, 2);
+        showValidationMessage('✓ All done! Copy the code below and paste it into the MTurk submission box.', false);
     }
-    // ============================================================================
-    // INITIALIZATION
-    // ============================================================================
-    window.addEventListener('DOMContentLoaded', function () {
+
+    // ----------------------------------------------------------------
+    // INITIALISATION
+    // ----------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
         initializeMTurkForm();
         updateProgress();
         confidenceDefinition.innerHTML = confidenceDefinitions[4];
-        initializeRandomFrame();
+        initializeRandomFrame();        // pick a random start point
     });
 </script>
 </body>
