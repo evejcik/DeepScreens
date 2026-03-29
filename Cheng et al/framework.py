@@ -37,7 +37,7 @@ import argparse
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 
-from ..Data_Exploration.data_loader import load_and_clean_data
+from data_loader import load_and_clean_data
 
 # def clean_occlusion_reason(df):
 #     #this is for when the visibility_category is 3 or 5 -> then there is no occlusion reason, so need to replace the blanks to prevent crashes

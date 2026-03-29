@@ -30,7 +30,7 @@ def find_these_fours(df):
 def main(data):
 
     df = pd.read_csv(data)
-    df = clean_occlusion_reason(df) #cleans up visibility categories 3 and 1
+    # df = clean_occlusion_reason(df) #cleans up visibility categories 3 and 1
     
     find_these_fours(df.copy(deep=True))
     
