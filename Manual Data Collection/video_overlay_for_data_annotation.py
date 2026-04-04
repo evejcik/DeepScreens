@@ -505,6 +505,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
                 video_shape=video_shape)
             label = f"Instance: {instance_ind}" if track_id is None else f"Frame: {frame_id}, Instance: {instance_ind} out of {len(instances) - 1} Track Id: {track_id}"
             draw_bbox_and_label(frame, instance=instance, instance_ind=instance_ind, label=label)
+            
 
         if writer is not None:
             # `frame` already contains the drawn rectangles / labels

@@ -70,6 +70,16 @@ def frame_to_instances_map(data):
 
     return frame_map
 
+def frame_to_joints_map(data):
+    joint_map = {}
+
+    for frame in data['instance_info']:
+        frame_id = int(frame['frame_id']) - 1
+        # instances = frame.get('instances', [])
+
+        # frame_map[frame_id] = instances
+
+        for joint in data['instance_info']
 
 def keypoints2D(instance):
     kps = np.array(instance['keypoints']) #gets the list of points of hwere the keypoints are at this one instance
@@ -123,9 +133,11 @@ def draw_joint_bbox(img, x,y, area = 128):
     y_lower_corner = y + half_area
 
     color = (255,0,0)
-    cv2.rectangel(img, (x_upper_cornerx,y_upper_corner), (x_lower_corner, y_lower_corner), color, 1)
+    cv2.rectangle(img, (x_upper_cornerx,y_upper_corner), (x_lower_corner, y_lower_corner), color, 1)
 
-def get_x_y_from_inst()
+def get_x_y_from_inst(instance, frame_id, joint_name):
+    x = 
+
 
 def color_for_inst(instance_ind):
     if instance_ind == 0:
@@ -501,6 +513,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             ok_nobbox, frame_nobbox = cap_nobbox.read()
         
         instances = instances_map.get(frame_id, [])
+        joints = joints_map.get(frame_id, joint_id, [])
         cv2.putText(
             frame,
             f"Frame: {frame_id}  Instances: {len(instances)}",
@@ -521,6 +534,8 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
                 video_shape=video_shape)
             label = f"Instance: {instance_ind}" if track_id is None else f"Frame: {frame_id}, Instance: {instance_ind} out of {len(instances) - 1} Track Id: {track_id}"
             draw_bbox_and_label(frame, instance=instance, instance_ind=instance_ind, label=label)
+            for joint_ind, joint in enumerate(keypoints)
+            #draw_joint_bbox(frame, instance, joint)
 
         if writer is not None:
             # `frame` already contains the drawn rectangles / labels
