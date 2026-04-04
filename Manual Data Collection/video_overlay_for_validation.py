@@ -75,9 +75,19 @@ def frame_to_joints_map(data):
 
     for frame in data['instance_info']:
         frame_id = int(frame['frame_id']) - 1
-        # instances = frame.get('instances', [])
+        instances = frame.get('instances', [])
 
-        # frame_map[frame_id] = instances
+        frame_map = {}
+        for instance_id, instance in enumerate(instances):
+            keypoints = instance.get('keypoints', [])
+
+            joints = {}
+            for joint_id, (x,y) in enumerate(keypoints):
+                joints[joint_id] = {'x': x, 'y': y}
+
+            frame_map[instance_id] = joints
+
+        joint_map[frame_id] = frame_map
 
         for joint in data['instance_info']
 
