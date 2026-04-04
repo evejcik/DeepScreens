@@ -71,6 +71,8 @@ def frame_to_instances_map(data):
     return frame_map
 
 def frame_to_joints_map(data):
+    #takes in data
+    #returns fast look up dictionary of each frame to array of each index of each joint
     joint_map = {}
 
     for frame in data['instance_info']:
@@ -87,9 +89,9 @@ def frame_to_joints_map(data):
 
             frame_map[instance_id] = joints
 
-        joint_map[frame_id] = frame_map
-
-        for joint in data['instance_info']
+        joints[frame_id] = frame_map
+    
+    return joints
 
 def keypoints2D(instance):
     kps = np.array(instance['keypoints']) #gets the list of points of hwere the keypoints are at this one instance
