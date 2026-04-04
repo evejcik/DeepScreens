@@ -110,6 +110,22 @@ def draw_bbox_and_label(img, instance, instance_ind, label):
         cv2.LINE_AA
     )
 
+def draw_joint_bbox(img, x,y, area = 128):
+    #takes in 2D coordinates of joint
+    #draws box around point with width, height = area, area
+
+    half_area = int(area / 2)
+
+    x_upper_corner = x - half_area
+    y_upper_corner = y - half_area
+
+    x_lower_corner = x + half_area
+    y_lower_corner = y + half_area
+
+    color = (255,0,0)
+    cv2.rectangel(img, (x_upper_cornerx,y_upper_corner), (x_lower_corner, y_lower_corner), color, 1)
+
+def get_x_y_from_inst()
 
 def color_for_inst(instance_ind):
     if instance_ind == 0:
