@@ -504,7 +504,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         if os.path.exists(data):
             os.remove(data)
             print(f"{data} has been deleted.")
-        df = new_df(json_data, json_data['meta_info_3d']['keypoint_id2name'], json_data['meta_info_3d']['lower_body_ids'])
+        df = new_df(json_data, meta['keypoint_id2name'], meta['lower_body_ids'])
         df.to_csv(f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv", index=False)
         df_name = f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv"
         print(f"Created new dataset {df_name} with {len(df)} rows. Columns = [{df.columns}]")
@@ -553,7 +553,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
 
             if joint is not None:
                 try: 
-                    x, y = get_x_y_from_inst(joints_map, frame_id, instance_ind, joint, json_data['meta_info_3d']['keypoint_id2name'])
+                    x, y = get_x_y_from_inst(joints_map, frame_id, instance_ind, joint, meta['keypoint_id2name'])
                     draw_joint_bbox(frame, instance, instance_ind, joint)
 
         if writer is not None:
