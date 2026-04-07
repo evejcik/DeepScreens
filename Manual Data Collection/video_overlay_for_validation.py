@@ -73,6 +73,7 @@ def frame_to_instances_map(data):
 def frame_to_joints_map(data):
     #takes in data
     #returns fast look up dictionary of each frame to array of each index of each joint
+    #returns: joint_map[frame_id][instance_id][joint_id]['x']
     joint_map = {}
 
     for frame in data['instance_info']:
