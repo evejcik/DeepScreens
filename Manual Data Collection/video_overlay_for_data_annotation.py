@@ -129,10 +129,7 @@ def color_for_inst(instance_ind):
     # g = (17 * instance_ind + 91) % 256
     # r = (37 * instance_ind + 53) % 256
 
-
-    
     return (int(b), int(g), int(r))
-    return (b, g, r)
 
 
 def _segment_start_from_path(path: str) -> int:
