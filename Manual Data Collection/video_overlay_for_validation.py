@@ -90,7 +90,7 @@ def frame_to_joints_map(data):
 
             frame_map[instance_id] = joints
 
-        joints[frame_id] = frame_map
+        joint_map[frame_id] = frame_map
     
     return joints
 
@@ -146,11 +146,15 @@ def draw_joint_bbox(img, x,y, area = 128):
     y_lower_corner = y + half_area
 
     color = (255,0,0)
-    cv2.rectangle(img, (x_upper_cornerx,y_upper_corner), (x_lower_corner, y_lower_corner), color, 1)
+    cv2.rectangle(img, (x_upper_corner,y_upper_corner), (x_lower_corner, y_lower_corner), color, 1)
 
-def get_x_y_from_inst(instance, frame_id, joint_name):
-    x = 
-    y = 
+def get_x_y_from_inst(joints_map, frame_id, instance_id, joint_name, keypoint_id2name):
+
+    #how to get joint_id from joint_name?
+    joint_id = next((int(k) for k, v in keypoint_id2name.items() if v == joint_name), None)
+    pt = joints_map[frame_id][instance_id][joint_id]
+    
+    return float(pt['x']), float(pt['y'])
 
 
 def color_for_inst(instance_ind):
@@ -160,16 +164,19 @@ def color_for_inst(instance_ind):
     if instance_ind == 1:
         r,g,b = 255, 230, 0
 
+    else:
+        # deterministic but amplified (max 255)
+        b = min((97 * instance_ind + 29) % 256 * 1.5, 255)
+        g = min((17 * instance_ind + 91) % 256 * 1.5, 255)
+        r = min((37 * instance_ind + 53) % 256 * 1.5, 255)
+
     # deterministic per instance index (BGR)
     # b = (97 * instance_ind + 29) % 256
     # g = (17 * instance_ind + 91) % 256
     # r = (37 * instance_ind + 53) % 256
 
 
-    # deterministic but amplified (max 255)
-    # b = min((97 * instance_ind + 29) % 256 * 1.5, 255)
-    # g = min((17 * instance_ind + 91) % 256 * 1.5, 255)
-    # r = min((37 * instance_ind + 53) % 256 * 1.5, 255)
+    
     return (int(b), int(g), int(r))
     return (b, g, r)
 
@@ -278,9 +285,7 @@ def new_df(data, keypoint_id2name, lower_body_ids, joint):
                         'track_id': track_id,
                         'joint_id': joint_id,
                         'joint_name': joint_name,
-                        'visibility_category': None,
-                        'occlusion_severity': None,
-                        'occlusion_reason': None,
+                        'joint_reliability': None,
                         'annotator_confidence': None,
                         'reason_for_low_confidence': None,
                         'valid': None,
@@ -524,7 +529,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             ok_nobbox, frame_nobbox = cap_nobbox.read()
         
         instances = instances_map.get(frame_id, [])
-        joints = joints_map.get(frame_id, joint_id, [])
+        joints = joints_map.get(frame_id, {})
         cv2.putText(
             frame,
             f"Frame: {frame_id}  Instances: {len(instances)}",
@@ -545,8 +550,11 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
                 video_shape=video_shape)
             label = f"Instance: {instance_ind}" if track_id is None else f"Frame: {frame_id}, Instance: {instance_ind} out of {len(instances) - 1} Track Id: {track_id}"
             draw_bbox_and_label(frame, instance=instance, instance_ind=instance_ind, label=label)
-            for joint_ind, joint in enumerate(keypoints)
-            #draw_joint_bbox(frame, instance, joint)
+
+            if joint is not None:
+                try: 
+                    x, y = get_x_y_from_inst(joints_map, frame_id, instance_ind, joint, json_data['meta_info_3d']['keypoint_id2name'])
+                    draw_joint_bbox(frame, instance, instance_ind, joint)
 
         if writer is not None:
             # `frame` already contains the drawn rectangles / labels
