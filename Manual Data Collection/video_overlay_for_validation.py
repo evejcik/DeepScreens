@@ -246,7 +246,7 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
     return vis_bbox.tolist()
 
 
-def new_df(data, keypoint_id2name, lower_body_ids, joint):
+def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
     rows = []
     frame_count = 0
     instance_count = 0
@@ -269,32 +269,34 @@ def new_df(data, keypoint_id2name, lower_body_ids, joint):
 
             if key in seen_keys:
                 print(f"DUPLICATE: frame_id={frame_id}, instance_id={instance_ind}, track_id={track_id}")
+            
             seen_keys.add(key)
             
             # for joint_id, keypoint in enumerate(keypoints):
             #     if joint_id in data['meta_info_3d']['lower_body_ids']:
             
-                    joint_count += 1
-                    joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
-                    x, y = keypoint[0], keypoint[1]
-                    confidence = confidences[joint_id] if joint_id < len(confidences) else None
-                    
-                    row = {
-                        'frame_id': frame_id,
-                        'instance_id': instance_ind,
-                        'track_id': track_id,
-                        'joint_id': joint_id,
-                        'joint_name': joint_name,
-                        'joint_reliability': None,
-                        'annotator_confidence': None,
-                        'reason_for_low_confidence': None,
-                        'valid': None,
-                        'notes': None,
-                        'x': x,
-                        'y': y,
-                        'mmpose_confidence': confidence,
-                    }
-                    rows.append(row)
+            joint_count += 1
+            joint_id = keypoint_name2id.get(str(joint))
+            joint_name = keypoint_id2name.get(str(joint), f"joint_{joint}")
+            x, y = keypoint[0], keypoint[1]
+            confidence = confidences[joint_id] if joint_id < len(confidences) else None
+            
+            row = {
+                'frame_id': frame_id,
+                'instance_id': instance_ind,
+                'track_id': track_id,
+                'joint_id': joint_id,
+                'joint_name': joint_name,
+                'joint_reliability': None,
+                'annotator_confidence': None,
+                'reason_for_low_confidence': None,
+                'valid': None,
+                'notes': None,
+                'x': x,
+                'y': y,
+                'mmpose_confidence': confidence,
+            }
+            rows.append(row)
     
     # Print debug info
     print(f"DEBUG: Total frames: {frame_count}")
@@ -504,7 +506,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         if os.path.exists(data):
             os.remove(data)
             print(f"{data} has been deleted.")
-        df = new_df(json_data, meta['keypoint_id2name'], meta['lower_body_ids'])
+        df = new_df(json_data, meta['keypoint_id2name'], meta['lower_body_ids'], joint)
         df.to_csv(f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv", index=False)
         df_name = f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv"
         print(f"Created new dataset {df_name} with {len(df)} rows. Columns = [{df.columns}]")
@@ -552,12 +554,10 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             draw_bbox_and_label(frame, instance=instance, instance_ind=instance_ind, label=label)
 
             if joint is not None:
-                try: 
-                    x, y = get_x_y_from_inst(joints_map, frame_id, instance_ind, joint, meta['keypoint_id2name'])
-                    draw_joint_bbox(frame, instance, instance_ind, joint)
+                x, y = get_x_y_from_inst(joints_map, frame_id, instance_ind, joint, meta['keypoint_id2name'])
+                draw_joint_bbox(frame, instance, instance_ind, joint)
 
         if writer is not None:
-            # `frame` already contains the drawn rectangles / labels
             writer.write(frame)
         
                 # Concatenate or display single frame

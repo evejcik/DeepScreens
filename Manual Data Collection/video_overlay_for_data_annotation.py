@@ -118,16 +118,19 @@ def color_for_inst(instance_ind):
     if instance_ind == 1:
         r,g,b = 255, 230, 0
 
+    else:
+        # deterministic but amplified (max 255)
+        b = min((97 * instance_ind + 29) % 256 * 1.5, 255)
+        g = min((17 * instance_ind + 91) % 256 * 1.5, 255)
+        r = min((37 * instance_ind + 53) % 256 * 1.5, 255)
+
     # deterministic per instance index (BGR)
     # b = (97 * instance_ind + 29) % 256
     # g = (17 * instance_ind + 91) % 256
     # r = (37 * instance_ind + 53) % 256
 
 
-    # deterministic but amplified (max 255)
-    # b = min((97 * instance_ind + 29) % 256 * 1.5, 255)
-    # g = min((17 * instance_ind + 91) % 256 * 1.5, 255)
-    # r = min((37 * instance_ind + 53) % 256 * 1.5, 255)
+    
     return (int(b), int(g), int(r))
     return (b, g, r)
 
@@ -196,8 +199,54 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
 
     return vis_bbox.tolist()
 
+def draw_joint_bbox(img, x,y, area = 128):
+    #takes in 2D coordinates of joint
+    #draws box around point with width, height = area, area
 
-def new_df(data, keypoint_id2name, lower_body_ids):
+    half_area = int(area / 2)
+
+    x_upper_corner = x - half_area
+    y_upper_corner = y - half_area
+
+    x_lower_corner = x + half_area
+    y_lower_corner = y + half_area
+
+    color = (255,0,0)
+    cv2.rectangle(img, (x_upper_corner,y_upper_corner), (x_lower_corner, y_lower_corner), color, 1)
+
+def get_x_y_from_inst(joints_map, frame_id, instance_id, joint_name, keypoint_id2name):
+
+    #how to get joint_id from joint_name?
+    joint_id = next((int(k) for k, v in keypoint_id2name.items() if v == joint_name), None)
+    pt = joints_map[frame_id][instance_id][joint_id]
+    
+    return float(pt['x']), float(pt['y'])
+
+def frame_to_joints_map(data):
+    #takes in data
+    #returns fast look up dictionary of each frame to array of each index of each joint
+    #returns: joint_map[frame_id][instance_id][joint_id]['x']
+    joint_map = {}
+
+    for frame in data['instance_info']:
+        frame_id = int(frame['frame_id']) - 1
+        instances = frame.get('instances', [])
+
+        frame_map = {}
+        for instance_id, instance in enumerate(instances):
+            keypoints = instance.get('keypoints', [])
+
+            joints = {}
+            for joint_id, (x,y) in enumerate(keypoints):
+                joints[joint_id] = {'x': x, 'y': y}
+
+            frame_map[instance_id] = joints
+
+        joint_map[frame_id] = frame_map
+    
+    return joints_map
+
+def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
     rows = []
     frame_count = 0
     instance_count = 0
@@ -391,7 +440,7 @@ def resize_frame_to_match(frame1, frame2):
         frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
     return frame2
 
-def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nobbox, output_path):
+def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nobbox, output_path, joint):
 
     cap = cv2.VideoCapture(mp4_path)
 
@@ -412,6 +461,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
     json_data, json_dict = load_json(json_path)
     meta = json_data['meta_info_3d'] 
     instances_map = frame_to_instances_map(json_data)
+    joints_map = frame_to_joints_map(json_data)
     cap = cv2.VideoCapture(mp4_path)
     
     cap_nobbox = None
@@ -460,7 +510,11 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         if os.path.exists(data):
             os.remove(data)
             print(f"{data} has been deleted.")
-        df = new_df(json_data, json_data['meta_info_3d']['keypoint_id2name'], json_data['meta_info_3d']['lower_body_ids'])
+        df = new_df(json_data, 
+            json_data['meta_info_3d']['keypoint_id2name'], 
+            json_data['meta_info_3d']['keypoint_name2id'], 
+            json_data['meta_info_3d']['lower_body_ids'],
+            joint)
         df.to_csv(f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv", index=False)
         df_name = f"{json_dict.get('parent_dir')}_{json_dict.get('file_name')}.csv"
         print(f"Created new dataset {df_name} with {len(df)} rows. Columns = [{df.columns}]")
@@ -505,6 +559,10 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
                 video_shape=video_shape)
             label = f"Instance: {instance_ind}" if track_id is None else f"Frame: {frame_id}, Instance: {instance_ind} out of {len(instances) - 1} Track Id: {track_id}"
             draw_bbox_and_label(frame, instance=instance, instance_ind=instance_ind, label=label)
+
+            if joint is not None:
+                x, y = get_x_y_from_inst(joints_map, frame_id, instance_ind, joint, meta['keypoint_id2name'])
+                draw_joint_bbox(frame, float(x), float(y))
             
 
         if writer is not None:
@@ -581,6 +639,7 @@ if __name__ == "__main__":
     ap.add_argument("--video_nobbox", default = None)
     ap.add_argument("--start_nobbox", type=int, default=0)
     ap.add_argument("--output_path", help = "Path for where video with drawn bounding boxes will be.")
+    ap.add_argument("--joint", default=None)
 
     args = ap.parse_args()
     main(
@@ -591,6 +650,7 @@ if __name__ == "__main__":
         args.create_new_df, 
         args.video_nobbox, #vid without bboxes path
         args.start_nobbox, #regular vid without bboxes start frame
-        args.output_path
+        args.output_path,
+        args.joint
         )
 
