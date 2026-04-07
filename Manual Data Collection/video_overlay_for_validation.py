@@ -150,6 +150,7 @@ def draw_joint_bbox(img, x,y, area = 128):
 
 def get_x_y_from_inst(instance, frame_id, joint_name):
     x = 
+    y = 
 
 
 def color_for_inst(instance_ind):
@@ -238,7 +239,7 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
     return vis_bbox.tolist()
 
 
-def new_df(data, keypoint_id2name, lower_body_ids):
+def new_df(data, keypoint_id2name, lower_body_ids, joint):
     rows = []
     frame_count = 0
     instance_count = 0
@@ -263,8 +264,9 @@ def new_df(data, keypoint_id2name, lower_body_ids):
                 print(f"DUPLICATE: frame_id={frame_id}, instance_id={instance_ind}, track_id={track_id}")
             seen_keys.add(key)
             
-            for joint_id, keypoint in enumerate(keypoints):
-                if joint_id in data['meta_info_3d']['lower_body_ids']:
+            # for joint_id, keypoint in enumerate(keypoints):
+            #     if joint_id in data['meta_info_3d']['lower_body_ids']:
+            
                     joint_count += 1
                     joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
                     x, y = keypoint[0], keypoint[1]
@@ -432,7 +434,7 @@ def resize_frame_to_match(frame1, frame2):
         frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
     return frame2
 
-def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nobbox, output_path):
+def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nobbox, output_path, joint):
 
     cap = cv2.VideoCapture(mp4_path)
 
@@ -453,6 +455,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
     json_data, json_dict = load_json(json_path)
     meta = json_data['meta_info_3d'] 
     instances_map = frame_to_instances_map(json_data)
+    joints_map = frame_to_joints_map(json_data)
     cap = cv2.VideoCapture(mp4_path)
     
     cap_nobbox = None
@@ -462,11 +465,6 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
     
     video_shape = [int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                    int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))]
-    
-    frame_id = 0
-    if start is None:
-        start = 0
-    frame_id = start
     
     frame_id = 0
     if start is None:
@@ -624,6 +622,7 @@ if __name__ == "__main__":
     ap.add_argument("--video_nobbox", default = None)
     ap.add_argument("--start_nobbox", type=int, default=0)
     ap.add_argument("--output_path", help = "Path for where video with drawn bounding boxes will be.")
+    ap.add_argument("--joint")
 
     args = ap.parse_args()
     main(
@@ -634,6 +633,7 @@ if __name__ == "__main__":
         args.create_new_df, 
         args.video_nobbox, #vid without bboxes path
         args.start_nobbox, #regular vid without bboxes start frame
-        args.output_path
+        args.output_path,
+        args.joint
         )
 
