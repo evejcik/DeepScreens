@@ -95,16 +95,16 @@ def draw_bbox_and_label(img, instance, instance_ind, label):
 
     x1, y1, x2, y2 = bbox
     x1 = clamp_int(x1, 0, w - 1)
-    y1 = clamp_int(y1, 0, h - 1)
+    y1 = clamp_int(y1, 0, h - 1) + 100
     x2 = clamp_int(x2, 0, w - 1)
-    y2 = clamp_int(y2, 0, h - 1)
+    y2 = clamp_int(y2, 0, h - 1) + 100
 
     color = color_for_inst(instance_ind)
     cv2.rectangle(img, (x1, y1), (x2, y2), color, 1)
 
     txt_y = y1
     cv2.putText(
-        img, label, (x1, txt_y),
+        img, label, (x1, txt_y + 100),
         cv2.FONT_HERSHEY_SIMPLEX, 0.6,
         color, 2,           # white, thick enough to be bright
         cv2.LINE_AA
@@ -196,7 +196,7 @@ def visualiser_bbox_from_json(json_bbox, meta, video_shape=None):
 
     return vis_bbox.tolist()
 
-def draw_joint_bbox(img, x,y, area = 128):
+def draw_joint_bbox(img, x,y, area = 32):
     #takes in 2D coordinates of joint
     #draws box around point with width, height = area, area
 
@@ -209,7 +209,7 @@ def draw_joint_bbox(img, x,y, area = 128):
     y_lower_corner = y + half_area
 
     color = (255,0,0)
-    cv2.rectangle(img, (x_upper_corner,y_upper_corner), (x_lower_corner, y_lower_corner), color, 1)
+    cv2.rectangle(img, (x_upper_corner,y_upper_corner + 300), (x_lower_corner, y_lower_corner + 300), color, 1)
 
 def get_x_y_from_inst(joints_map, frame_id, instance_id, joint_name, keypoint_id2name):
 
@@ -217,7 +217,7 @@ def get_x_y_from_inst(joints_map, frame_id, instance_id, joint_name, keypoint_id
     joint_id = next((int(k) for k, v in keypoint_id2name.items() if v == joint_name), None)
     pt = joints_map[frame_id][instance_id][joint_id]
     
-    return float(pt['x']), float(pt['y'])
+    return int(pt['x']), int(pt['y'])
 
 def frame_to_joints_map(data):
     #takes in data
@@ -241,7 +241,7 @@ def frame_to_joints_map(data):
 
         joint_map[frame_id] = frame_map
     
-    return joints_map
+    return joint_map
 
 def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
     rows = []
@@ -518,6 +518,8 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
         create_new_df = 0
     
     cv2.namedWindow("overlay", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("overlay", width, height)
+
     
     while True:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
@@ -547,6 +549,9 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             cv2.LINE_AA
         )
         
+
+        print(f"[DEBUG] video width={width} height={height}")
+
         for instance_ind, instance in enumerate(instances):
             track_id = instance.get('track_id', None)
             raw_bbox = instance['bbox']
@@ -559,7 +564,11 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
 
             if joint is not None:
                 x, y = get_x_y_from_inst(joints_map, frame_id, instance_ind, joint, meta['keypoint_id2name'])
-                draw_joint_bbox(frame, float(x), float(y))
+                print(f"[DEBUG] raw_bbox: {instance['bbox']}")  # <-- here
+                print(f"[DEBUG] vis_bbox: {vis_bbox}")           # <-- here
+                print(f"[DEBUG] joint x={x} y={y}")             # <-- here
+                draw_joint_bbox(frame, int(x), int(y))
+                cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
             
 
         if writer is not None:
@@ -596,6 +605,7 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
             display_frame = frame
         
         cv2.imshow("overlay", display_frame)
+        
         key = cv2.waitKeyEx(0)
 
         if key == ord('q'):
