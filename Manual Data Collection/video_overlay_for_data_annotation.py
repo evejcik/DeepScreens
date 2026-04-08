@@ -201,7 +201,7 @@ def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
                     confidence = confidences[joint_id] if joint_id < len(confidences) else None
                     rows.append({
                         'frame_id': frame_id,
-                        'instance_id': instance_id,
+                        'instance_id': instance_ind,
                         'track_id': track_id,
                         'joint_id': joint_id,
                         'joint_name': joint_name,
