@@ -312,17 +312,38 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
     height   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fourcc   = cv2.VideoWriter_fourcc(*"mp4v")
 
-    # Compute scale factors if segment_mp4 is provided
+    # Compute scale factors and crop offset if segment_mp4 is provided
     seg_scale_x = 1.0
     seg_scale_y = 1.0
+    seg_offset_x = 0
+    seg_offset_y = 0
     if segment_mp4 is not None:
         seg_cap = cv2.VideoCapture(segment_mp4)
         seg_w = int(seg_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         seg_h = int(seg_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         seg_cap.release()
+
+        # detect white letterbox bars
+        seg_cap2 = cv2.VideoCapture(segment_mp4)
+        ret, seg_frame0 = seg_cap2.read()
+        seg_cap2.release()
+        top_bar = 0
+        for i in range(seg_frame0.shape[0]):
+            if not np.all(seg_frame0[i] > 200):
+                top_bar = i
+                break
+        bottom_bar = seg_frame0.shape[0] - 1
+        for i in range(seg_frame0.shape[0]-1, -1, -1):
+            if not np.all(seg_frame0[i] > 200):
+                bottom_bar = i
+                break
+        content_h = bottom_bar - top_bar
         seg_scale_x = width / seg_w
-        seg_scale_y = height / seg_h
-        print(f"[INFO] Scaling joints from {seg_w}x{seg_h} -> {width}x{height} (sx={seg_scale_x:.3f}, sy={seg_scale_y:.3f})")
+        seg_scale_y = height / content_h
+        seg_offset_x = 502
+        seg_offset_y = int(-top_bar * seg_scale_y)
+        print(f"[INFO] Letterbox: top={top_bar} bottom={seg_frame0.shape[0]-1-bottom_bar} content_h={content_h}")
+        print(f"[INFO] Scale: sx={seg_scale_x:.3f} sy={seg_scale_y:.3f} offset=({seg_offset_x},{seg_offset_y})")
 
     writer = None
     if output_path is not None:
@@ -429,10 +450,8 @@ def main(mp4_path, json_path, start, end, create_new_df, video_nobbox, start_nob
 
             if joint is not None and show_joint_bbox:
                 x, y = get_x_y_from_inst(joints_map, frame_id, instance_ind, joint, meta['keypoint_id2name'])
-                
-                x_scaled = int(x * seg_scale_x)
-                y_scaled = int(y * seg_scale_y)
-                print(f"[DEBUG] frame={frame_id} inst={instance_ind} bbox_raw={instance['bbox']} x_scaled={x_scaled} y_scaled={y_scaled} frame_shape={frame.shape}")
+                x_scaled = int(x * seg_scale_x) + seg_offset_x
+                y_scaled = int(y * seg_scale_y) + seg_offset_y
                 draw_joint_bbox(frame, x_scaled, y_scaled, color=color)
                 cv2.circle(frame, (x_scaled, y_scaled), 5, color, -1)
 
@@ -494,6 +513,8 @@ if __name__ == "__main__":
     ap.add_argument("--show_bbox", type=int, default=1, help="1=show instance bboxes, 0=hide")
     ap.add_argument("--show_joint_bbox", type=int, default=1, help="1=show joint bbox, 0=hide")
     ap.add_argument("--segment_mp4", default=None, help="Original segment mp4 used to generate the JSON, for coordinate scaling")
+    ap.add_argument("--seg_offset_x", type=int, default=254, help="X pixel offset of segment crop within full frame (from find_letterbox.py)")
+    ap.add_argument("--seg_offset_y", type=int, default=0, help="Y pixel offset of segment crop within full frame")
 
     args = ap.parse_args()
     main(
