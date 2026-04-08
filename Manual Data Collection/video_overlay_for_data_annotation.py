@@ -200,13 +200,19 @@ def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
                     x, y = keypoint[0], keypoint[1]
                     confidence = confidences[joint_id] if joint_id < len(confidences) else None
                     rows.append({
-                        'frame_id': frame_id, 'instance_id': instance_ind,
-                        'track_id': track_id, 'joint_id': joint_id,
+                        'frame_id': frame_id,
+                        'instance_id': instance_id,
+                        'track_id': track_id,
+                        'joint_id': joint_id,
                         'joint_name': joint_name,
-                        'visibility_category': None, 'occlusion_severity': None,
-                        'occlusion_reason': None, 'annotator_confidence': None,
-                        'reason_for_low_confidence': None, 'valid': None, 'notes': None,
-                        'x': x, 'y': y, 'mmpose_confidence': confidence,
+                        'x': x,
+                        'y': y,
+                        'mmpose_confidence': confidence,
+                        'reliability_category': None,  # trust/partial/dont_trust/cant_tell
+                        'annotator_confidence': None,  # 3 levels now, not 5
+                        'reason_for_distrust': None,   # only filled if partial/dont trust
+                        'dist_to_boundary': None,      # compute this automatically, don't annotate
+                        'valid': None,
                     })
     return pd.DataFrame(rows)
 
