@@ -103,10 +103,10 @@ def draw_joint_bbox(img, x, y, color, area=32):
     cv2.rectangle(img, (x - half, y - half), (x + half, y + half), color, 2)
 
 
-def get_x_y_from_inst(joints_map, frame_id, instance_id, joint_name, keypoint_id2name):
-    joint_id = next((int(k) for k, v in keypoint_id2name.items() if v == joint_name), None)
+def get_x_y_from_inst(joints_map, frame_id, instance_id, joint_name, keypoint_name2id):
+    joint_id = keypoint_name2id.get(joint_name)
     if joint_id is None:
-        raise ValueError(f"Joint '{joint_name}' not found in keypoint_id2name")
+        raise ValueError(f"Joint '{joint_name}' not found in keypoint_name2id")
     pt = joints_map[frame_id][instance_id][joint_id]
     return int(pt['x']), int(pt['y'])
 
@@ -162,13 +162,6 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
     width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-
-    # If content dimensions not overridden, assume JSON coords are in the
-    # same pixel space as the mp4 (i.e. no letterboxing — identity transform).
-    if content_w is None:
-        content_w = width
-    if content_h is None:
-        content_h = height
 
     t = make_transform(content_w, content_h, width, height, offset_x, offset_y)
 
@@ -317,19 +310,18 @@ if __name__ == "__main__":
     ap.add_argument("--show_joint_bbox", type=int, default=1)
     ap.add_argument("--segment_mp4",     default=None,
                     help="Unused — kept for CLI compatibility")
-    # These defaults are derived from the fixed Tron segment geometry:
+    # These defaults are derived from the fixed segment geometry:
     # - Segments are always 1280x640 with white letterbox top=140, bottom=500,
     #   giving content height=359. Content width=650 was empirically confirmed
     #   by matching bbox widths on the full 1920x1080 movie (scale_x≈2.95≈scale_y≈3.008).
     # - offset_x=10 was empirically confirmed from click correspondence.
-    # If content_w/content_h are not supplied, the code defaults to the mp4
-    # dimensions (identity transform — use this for non-letterboxed videos).
-    ap.add_argument("--content_w",       type=int, default=None,
-                    help="Width of pose-estimator input region (default: mp4 width)")
-    ap.add_argument("--content_h",       type=int, default=None,
-                    help="Height of pose-estimator input region (default: mp4 height)")
-    ap.add_argument("--offset_x",        type=int, default=0,
-                    help="Pixels to shift all annotations right in full-movie space (default: 0)")
+    # Override on CLI only if using segments with different geometry.
+    ap.add_argument("--content_w",       type=int, default=650,
+                    help="Width of pose-estimator input region in segment (default: 650)")
+    ap.add_argument("--content_h",       type=int, default=359,
+                    help="Height of pose-estimator input region in segment (default: 359)")
+    ap.add_argument("--offset_x",        type=int, default=10,
+                    help="Pixels to shift all annotations right in full-movie space (default: 10)")
     ap.add_argument("--offset_y",        type=int, default=0,
                     help="Pixels to shift all annotations down in full-movie space (default: 0)")
 
