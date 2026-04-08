@@ -59,22 +59,81 @@ def color_for_inst(idx):
         return (int(b), int(g), int(r))
 
 
+def detect_content_region(seg_path):
+    """
+    Read the first frame of seg_path and detect white letterbox/pillarbox bars.
+    Returns (content_w, content_h, offset_x, offset_y) in the display video's
+    pixel space, where offset_x/y is where the content's top-left corner lands.
+
+    White is defined as all channels > 200. If no bars are found, returns the
+    full segment dimensions with zero offsets (identity transform).
+    """
+    cap = cv2.VideoCapture(seg_path)
+    ret, frame = cap.read()
+    seg_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    seg_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cap.release()
+
+    if not ret:
+        raise RuntimeError(f"Cannot read first frame of segment: {seg_path}")
+
+    # Scan for white bars on each edge
+    top = 0
+    for i in range(seg_h):
+        if not np.all(frame[i] > 200):
+            top = i
+            break
+
+    bottom = seg_h - 1
+    for i in range(seg_h - 1, -1, -1):
+        if not np.all(frame[i] > 200):
+            bottom = i
+            break
+
+    left = 0
+    for j in range(seg_w):
+        if not np.all(frame[:, j] > 200):
+            left = j
+            break
+
+    right = seg_w - 1
+    for j in range(seg_w - 1, -1, -1):
+        if not np.all(frame[:, j] > 200):
+            right = j
+            break
+
+    content_w = right - left + 1
+    content_h = bottom - top + 1
+
+    print(f"[SEGMENT] {seg_w}x{seg_h} | "
+          f"bars: top={top} bottom={seg_h-1-bottom} left={left} right={seg_w-1-right} | "
+          f"content: {content_w}x{content_h}")
+
+    return content_w, content_h, left, top
+
+
 def make_transform(content_w, content_h, full_w, full_h,
+                   content_left=0, content_top=0,
                    offset_x=0, offset_y=0):
+    scale_x = full_w / content_w
+    scale_y = full_h / content_h
     t = {
-        'scale_x':  full_w / content_w,
-        'scale_y':  full_h / content_h,
-        'offset_x': offset_x,
-        'offset_y': offset_y,
+        'scale_x':      scale_x,
+        'scale_y':      scale_y,
+        'content_left': content_left,
+        'content_top':  content_top,
+        'offset_x':     offset_x,
+        'offset_y':     offset_y,
     }
-    print(f"[TRANSFORM] scale_x={t['scale_x']:.4f} scale_y={t['scale_y']:.4f} "
+    print(f"[TRANSFORM] scale_x={scale_x:.4f} scale_y={scale_y:.4f} "
+          f"content_left={content_left} content_top={content_top} "
           f"offset_x={offset_x} offset_y={offset_y}")
     return t
 
 
 def apply_transform(x, y, t):
-    x_out = int(x * t['scale_x'] + t['offset_x'])
-    y_out = int(y * t['scale_y'] + t['offset_y'])
+    x_out = int((x - t['content_left']) * t['scale_x'] + t['offset_x'])
+    y_out = int((y - t['content_top'])  * t['scale_y'] + t['offset_y'])
     return x_out, y_out
 
 
@@ -83,15 +142,12 @@ def draw_bbox_and_label(img, instance, instance_ind, label, t, show_bbox=True):
         return
     h, w = img.shape[:2]
     x1, y1, x2, y2 = map(float, instance['bbox'][:4])
-
     x1, y1 = apply_transform(x1, y1, t)
     x2, y2 = apply_transform(x2, y2, t)
-
     x1 = clamp_int(x1, 0, w - 1)
     y1 = clamp_int(y1, 0, h - 1)
     x2 = clamp_int(x2, 0, w - 1)
     y2 = clamp_int(y2, 0, h - 1)
-
     color = color_for_inst(instance_ind)
     cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
     cv2.putText(img, label, (x1, max(y1 - 5, 0)),
@@ -154,16 +210,32 @@ def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
 
 def main(mp4_path, json_path, start, end, create_new_df_flag,
          video_nobbox, start_nobbox, output_path, joint,
-         show_bbox, show_joint_bbox,
-         content_w, content_h, offset_x, offset_y):
+         show_bbox, show_joint_bbox, segment_mp4,
+         use_segment_offsets):
 
     cap    = cv2.VideoCapture(mp4_path)
     fps    = cap.get(cv2.CAP_PROP_FPS)
     width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    cap.release()
 
-    t = make_transform(content_w, content_h, width, height, offset_x, offset_y)
+    # TRON_CONTENT_W/H/OFFSET_X are the empirically confirmed values for the
+    # Tron letterboxed segment geometry. Used when --use_segment_offsets is passed.
+    TRON_CONTENT_W = 650
+    TRON_CONTENT_H = 359
+    TRON_OFFSET_X  = 10
+
+    if use_segment_offsets:
+        print(f"[TRANSFORM] Using hardcoded segment offsets: "
+              f"content={TRON_CONTENT_W}x{TRON_CONTENT_H} offset_x={TRON_OFFSET_X}")
+        t = make_transform(TRON_CONTENT_W, TRON_CONTENT_H, width, height,
+                           0, 0, TRON_OFFSET_X, 0)
+    else:
+        seg_path = segment_mp4 if segment_mp4 is not None else mp4_path
+        auto_w, auto_h, content_left, content_top = detect_content_region(seg_path)
+        t = make_transform(auto_w, auto_h, width, height,
+                           content_left, content_top, 0, 0)
 
     writer = None
     if output_path is not None:
@@ -172,7 +244,7 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
         print(f"[INFO] Writing to: {output_path}")
 
     json_data, json_dict = load_json(json_path)
-    meta          = json_data['meta_info']   # 2D coco_wholebody, 133 keypoints
+    meta          = json_data['meta_info']
     instances_map = frame_to_instances_map(json_data)
     joints_map    = frame_to_joints_map(json_data)
 
@@ -298,7 +370,12 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--json",            required=True)
-    ap.add_argument("--mp4",             required=True)
+    ap.add_argument("--mp4",             required=True,
+                    help="Display video (full movie for letterboxed segments, "
+                         "or the segment itself if no letterboxing)")
+    ap.add_argument("--segment_mp4",     default=None,
+                    help="The letterboxed segment mp4 the JSON was generated from. "
+                         "If omitted, --mp4 is used (assumes no letterboxing).")
     ap.add_argument("--start",           type=int)
     ap.add_argument("--end",             type=int)
     ap.add_argument("--create_new_df",   type=int, default=0)
@@ -308,22 +385,10 @@ if __name__ == "__main__":
     ap.add_argument("--joint",           default=None)
     ap.add_argument("--show_bbox",       type=int, default=1)
     ap.add_argument("--show_joint_bbox", type=int, default=1)
-    ap.add_argument("--segment_mp4",     default=None,
-                    help="Unused — kept for CLI compatibility")
-    # These defaults are derived from the fixed segment geometry:
-    # - Segments are always 1280x640 with white letterbox top=140, bottom=500,
-    #   giving content height=359. Content width=650 was empirically confirmed
-    #   by matching bbox widths on the full 1920x1080 movie (scale_x≈2.95≈scale_y≈3.008).
-    # - offset_x=10 was empirically confirmed from click correspondence.
-    # Override on CLI only if using segments with different geometry.
-    ap.add_argument("--content_w",       type=int, default=650,
-                    help="Width of pose-estimator input region in segment (default: 650)")
-    ap.add_argument("--content_h",       type=int, default=359,
-                    help="Height of pose-estimator input region in segment (default: 359)")
-    ap.add_argument("--offset_x",        type=int, default=10,
-                    help="Pixels to shift all annotations right in full-movie space (default: 10)")
-    ap.add_argument("--offset_y",        type=int, default=0,
-                    help="Pixels to shift all annotations down in full-movie space (default: 0)")
+    ap.add_argument("--use_segment_offsets", action="store_true",
+                    help="Apply hardcoded Tron segment geometry "
+                         "(content_w=650, content_h=359, offset_x=10). "
+                         "Use for letterboxed Tron segments displayed on full 1920x1080 movie.")
 
     args = ap.parse_args()
     main(
@@ -335,6 +400,6 @@ if __name__ == "__main__":
         args.joint,
         bool(args.show_bbox),
         bool(args.show_joint_bbox),
-        args.content_w, args.content_h,
-        args.offset_x, args.offset_y,
+        args.segment_mp4,
+        args.use_segment_offsets,
     )
