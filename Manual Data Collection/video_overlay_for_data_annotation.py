@@ -194,6 +194,9 @@ def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
             for joint_id, keypoint in enumerate(keypoints):
                 if joint_id in lower_body_ids:
                     joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
+                    # Only include rows for the selected joint
+                    if joint is not None and joint_name != joint:
+                        continue
                     x, y = keypoint[0], keypoint[1]
                     confidence = confidences[joint_id] if joint_id < len(confidences) else None
                     rows.append({
