@@ -9,6 +9,8 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 
+from geometric_plausibility import add_geometric_plausibility, compute_boundary_distance
+
 
 def load_json(json_path):
     p = Path(json_path)
@@ -292,6 +294,11 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
         df = new_df(json_data,
                     meta['keypoint_id2name'], meta['keypoint_name2id'],
                     meta['lower_body_ids'], joint)
+
+        df = add_geometric_plausibility(df, json_data, conf_threshold=0.3)
+
+        # Add boundary distance — you need frame width/height from cap
+        df = compute_boundary_distance(df, width, height)
         df_name = f"{json_dict['parent_dir']}_{json_dict['file_name']}.csv"
         df.to_csv(df_name, index=False)
         print(f"Created {df_name} with {len(df)} rows.")
@@ -316,7 +323,7 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
 
         cv2.putText(frame,
                     f"Frame: {frame_id + video_frame_offset}  Instances: {len(instances)}",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2, cv2.LINE_AA)
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
 
         for instance_ind, instance in enumerate(instances):
             track_id = instance.get('track_id', None)
@@ -337,12 +344,15 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
         if writer is not None:
             writer.write(frame)
 
+        # cv2.putText(display_frame, f"Frame: {frame_id}",
+        #                 (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2, cv2.LINE_AA)
+
         if frame_nobbox is not None:
             frame_nobbox  = resize_frame_to_match(frame, frame_nobbox)
             display_frame = cv2.vconcat([frame, frame_nobbox])
             text_y = display_frame.shape[0] // 2
             cv2.putText(display_frame, f"Frame: {frame_id}",
-                        (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,0), 2, cv2.LINE_AA)
+                        (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2, cv2.LINE_AA)
             cv2.putText(display_frame, f"Frame: {frame_id_nobbox}",
                         (10, text_y+30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2, cv2.LINE_AA)
         else:
