@@ -151,7 +151,7 @@ def draw_bbox_and_label(img, instance, instance_ind, label, t, show_bbox=True):
     x2 = clamp_int(x2, 0, w - 1)
     y2 = clamp_int(y2, 0, h - 1)
     color = color_for_inst(instance_ind)
-    cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+    # cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
     cv2.putText(img, label, (x1, max(y1 - 5, 0)),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
 
@@ -180,7 +180,7 @@ def resize_frame_to_match(frame1, frame2):
     return frame2
 
 
-def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
+def new_df(data, keypoint_id2name, keypoint_name2id, joint):
     rows = []
     seen_keys = set()
     for frame in data['instance_info']:
@@ -194,28 +194,28 @@ def new_df(data, keypoint_id2name, keypoint_name2id, lower_body_ids, joint):
                 print(f"DUPLICATE: frame_id={frame_id}, instance_id={instance_ind}, track_id={track_id}")
             seen_keys.add(key)
             for joint_id, keypoint in enumerate(keypoints):
-                if joint_id in lower_body_ids:
-                    joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
-                    # Only include rows for the selected joint
-                    if joint is not None and joint_name != joint:
-                        continue
-                    x, y = keypoint[0], keypoint[1]
-                    confidence = confidences[joint_id] if joint_id < len(confidences) else None
-                    rows.append({
-                        'frame_id': frame_id,
-                        'instance_id': instance_ind,
-                        'track_id': track_id,
-                        'joint_id': joint_id,
-                        'joint_name': joint_name,
-                        'x': x,
-                        'y': y,
-                        'mmpose_confidence': confidence,
-                        'reliability_category': None,  # trust/partial/dont_trust/cant_tell
-                        'annotator_confidence': None,  # 3 levels now, not 5
-                        'reason_for_distrust': None,   # only filled if partial/dont trust
-                        'dist_to_boundary': None,      # compute this automatically, don't annotate
-                        'valid': None,
-                    })
+                # if joint_id in lower_body_ids:
+                joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
+                # Only include rows for the selected joint
+                if joint is not None and joint_name != joint:
+                    continue
+                x, y = keypoint[0], keypoint[1]
+                confidence = confidences[joint_id] if joint_id < len(confidences) else None
+                rows.append({
+                    'frame_id': frame_id,
+                    'instance_id': instance_ind,
+                    'track_id': track_id,
+                    'joint_id': joint_id,
+                    'joint_name': joint_name,
+                    'x': x,
+                    'y': y,
+                    'mmpose_confidence': confidence,
+                    'reliability_category': None,  # trust/partial/dont_trust/cant_tell
+                    'annotator_confidence': None,  # 3 levels now, not 5
+                    'reason_for_distrust': None,   # only filled if partial/dont trust
+                    'dist_to_boundary': None,      # compute this automatically, don't annotate
+                    'valid': None,
+                })
     return pd.DataFrame(rows)
 
 
@@ -293,7 +293,7 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
             os.remove("rows_df.csv")
         df = new_df(json_data,
                     meta['keypoint_id2name'], meta['keypoint_name2id'],
-                    meta['lower_body_ids'], joint)
+                    joint)
 
         df = add_geometric_plausibility(df, json_data, conf_threshold=0.3)
 
@@ -363,7 +363,7 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
 
         if key == ord('q'):
             break
-        elif key == ord(' '):
+        elif key == ord('s'):
             frame_id += 1
             if cap_nobbox is not None:
                 frame_id_nobbox_fractional += fps_ratio
