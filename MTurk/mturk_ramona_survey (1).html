@@ -1,0 +1,1736 @@
+
+                        <!DOCTYPE html>
+                        <html lang="en">
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+							<style>
+								body {
+									background-color: white; /* Ensure the iframe has a white background */
+								}
+
+								
+							</style>
+                        </head>
+                        <body>
+                            <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joint Annotation Task - 50 Frames</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+    background: #2e2e2e;            /* dark‑gray page background   */
+    color: #eaeaea;                 /* light‑gray text for readability */
+    font-family: -apple-system, BlinkMacSystemFont,
+                 'Segoe UI', Roboto, Oxygen, Ubuntu,
+                 Cantarell, sans-serif;
+}
+/* --------------------------------------------------------------
+   2️⃣  THE WHITE "container" that holds everything
+   -------------------------------------------------------------- */
+.container {
+    background: #3a3a3a;            /* a shade a little lighter than the page */
+    color: #eaeaea;                 /* keep the text light */
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+}
+/* --------------------------------------------------------------
+   3️⃣  THE "cards" that wrap the four blocks
+   -------------------------------------------------------------- */
+.instance-selector,
+.joint-selector,
+.form-section {                     /* this also catches the 3 & 4 sections */
+    background: #f2f2f2;           /* light‑gray card background      */
+    color: #222;                   /* dark text inside the card       */
+    padding: 18px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    margin-bottom: 24px;           /* space between the cards */
+}
+.joint-selector {
+    margin-bottom: 40px;           /* increased space after joint selector */
+}
+.form-section {
+    margin-bottom: 40px;           /* increased space between form sections */
+}
+/* Optional – make the card headings a little bolder */
+.instance-selector label,
+.joint-selector label,
+.form-section label {
+    color: #111;
+    font-weight: 600;
+}
+/* --------------------------------------------------------------
+   4️⃣  Keep the inner buttons & sliders looking the same
+   -------------------------------------------------------------- */
+.instance-btn,
+.joint-btn,
+.category-btn,
+.severity-btn,
+.reason-btn,
+.low-confidence-btn {
+    /* they already have a white background – change it to a neutral
+       gray that still contrasts with the card background */
+    background: white;
+    border-color: #bbb;
+}
+        header {
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .progress-section {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .progress-header h3 {
+            color: #1565c0;
+            font-size: 16px;
+        }
+        .progress-stats {
+            color: #1565c0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .progress-bar-container {
+            background: #fff;
+            border: 2px solid #2196F3;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .progress-bar-fill {
+            background: linear-gradient(90deg, #2196F3, #1976D2);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .progress-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+        }
+        .progress-item {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 3px solid #2196F3;
+            font-size: 12px;
+            text-align: center;
+        }
+        .progress-item strong {
+            color: #1565c0;
+            display: block;
+            font-size: 18px;
+            margin-bottom: 3px;
+        }
+        .progress-item .label {
+            color: #666;
+            font-size: 11px;
+        }
+        .instruction-banner {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .video-panel {
+            display: flex;
+            flex-direction: column;
+        }
+        .video-panel h2 {
+            font-size: 18px;
+            color: white;
+            margin-bottom: 15px;
+        }
+        video {
+            width: 100%;
+            background: #000;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+        .video-controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .btn-small {
+            padding: 8px 16px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .btn-small:hover {
+            background: #e8e8e8;
+            border-color: #999;
+        }
+        .frame-info {
+            margin-top: 12px;
+            padding: 10px;
+            background: #fafafa;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #666;
+            text-align: center;
+        }
+        .instance-warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #856404;
+        }
+        .annotation-panel {
+            display: flex;
+            flex-direction: column;
+        }
+        .annotation-panel h2 {
+            font-size: 18px;
+            color: white;
+            margin-bottom: 15px;
+        }
+        .instance-selector {
+            margin-bottom: 25px;
+        }
+        .instance-selector label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 16px;
+        }
+        .instance-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .instance-btn {
+            padding: 15px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            color: #333;
+            text-align: center;
+        }
+        .instance-btn[data-instance="0"] {
+            border-color: #e0e0e0;
+        }
+        .instance-btn[data-instance="0"]:hover {
+            border-color: #999;
+            background: #f5f5f5;
+        }
+        .instance-btn[data-instance="0"].active {
+            background: white;
+            border: 2px solid #666;
+            color: #000;
+        }
+        .instance-btn[data-instance="1"] {
+            border-color: #ffd54f;
+        }
+        .instance-btn[data-instance="1"]:hover {
+            border-color: #ffb300;
+            background: #fffef0;
+        }
+        .instance-btn[data-instance="1"].active {
+            background: #ffeb3b;
+            border: 2px solid #ffb300;
+            color: #000;
+        }
+        .joint-selector {
+            margin-bottom: 25px;
+        }
+        .joint-selector label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 16px;
+        }
+        .joint-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 10px;
+        }
+        .joint-btn {
+            padding: 12px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            color: #333;
+        }
+        .joint-btn:hover {
+            border-color: #2196F3;
+            background: #f0f7ff;
+        }
+        .joint-btn.active {
+            background: #2196F3;
+            color: white;
+            border-color: #2196F3;
+        }
+        .annotation-form {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+        .form-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .form-section:last-child {
+            margin-bottom: 0;
+        }
+        .form-section label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #333;
+            font-size: 15px;
+        }
+        .category-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .category-btn {
+            padding: 12px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            color: #333;
+            position: relative;
+        }
+        .category-btn:hover {
+            border-color: #4CAF50;
+            background: #f1f8f4;
+        }
+        .category-btn.active {
+            background: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+        .confidence-group {
+            margin-bottom: 20px;
+        }
+        .confidence-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 14px;
+        }
+        .confidence-slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: linear-gradient(to right, #f44336, #ff9800, #ffc107, #8bc34a, #4caf50);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .confidence-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2196F3;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .confidence-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2196F3;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .confidence-slider:disabled {
+            background: linear-gradient(to right, #ccc, #ccc);
+            cursor: not-allowed;
+        }
+        .confidence-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #666;
+        }
+        .confidence-value {
+            text-align: center;
+            font-weight: 600;
+            color: #2196F3;
+            margin-top: 8px;
+            font-size: 14px;
+        }
+        .confidence-definition {
+            background: #f0f7ff;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #1565c0;
+            border-left: 3px solid #2196F3;
+        }
+        .confidence-not-measure {
+            background: #ffe8e8;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: #c62828;
+            border-left: 3px solid #f44336;
+        }
+        .confidence-not-measure strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .conditional-section {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            border-radius: 4px;
+            display: none;
+        }
+        .conditional-section.show {
+            display: block;
+        }
+        .severity-group {
+            margin-bottom: 20px;
+        }
+        .severity-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 14px;
+        }
+        .severity-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+        }
+        .severity-btn {
+            padding: 10px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            color: #333;
+        }
+        .severity-btn:hover {
+            border-color: #ff9800;
+            background: #fff9e6;
+        }
+        .severity-btn.active {
+            background: #ff9800;
+            color: white;
+            border-color: #ff9800;
+        }
+        .reason-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px;
+        }
+        .reason-btn {
+            padding: 10px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            color: #333;
+        }
+        .reason-btn:hover {
+            border-color: #ff9800;
+            background: #fff9e6;
+        }
+        .reason-btn.active {
+            background: #ff9800;
+            color: white;
+            border-color: #ff9800;
+        }
+        .low-confidence-section {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fce4ec;
+            border-left: 4px solid #e91e63;
+            border-radius: 4px;
+            display: none;
+        }
+        .low-confidence-section.show {
+            display: block;
+        }
+        .low-confidence-section label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 14px;
+        }
+        .low-confidence-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .low-confidence-btn {
+            padding: 10px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            color: #333;
+        }
+        .low-confidence-btn:hover {
+            border-color: #e91e63;
+            background: #fce4ec;
+        }
+        .low-confidence-btn.active {
+            background: #e91e63;
+            color: white;
+            border-color: #e91e63;
+        }
+        .rules-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+        .rules-tab {
+            padding: 10px 15px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.2s;
+        }
+        .rules-tab:hover {
+            background: #e0e0e0;
+        }
+        .rules-tab.active {
+            background: #2196F3;
+            color: white;
+        }
+        .rules-panel {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 6px;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+        }
+        .rules-content {
+            display: none;
+        }
+        .rules-content.active {
+            display: block;
+        }
+        .rules-panel h3 {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        .rule-item {
+            margin-bottom: 15px;
+            padding: 12px;
+            background: white;
+            border-radius: 4px;
+            border-left: 4px solid #2196F3;
+        }
+        .rule-item strong {
+            color: #1565c0;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .rule-item p {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.5;
+            margin: 5px 0;
+        }
+        .example-section {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .example-section strong {
+            color: #2e7d32;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .example-section p {
+            font-size: 12px;
+            color: #555;
+            line-height: 1.5;
+            margin: 3px 0;
+        }
+        .form-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            justify-content: center;
+            align-items: center;
+        }
+        .form-actions-center {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+        }
+        .btn-primary {
+            padding: 12px 30px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #1976D2;
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+        }
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            padding: 12px 30px;
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover {
+            background: #e8e8e8;
+        }
+        .validation-message {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            display: none;
+            font-size: 14px;
+        }
+        .validation-message.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #f44336;
+            display: block;
+        }
+        .validation-message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #4caf50;
+            display: block;
+        }
+        .annotation-summary {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #333;
+            display: none;
+        }
+        .annotation-summary.show {
+            display: block;
+        }
+        .completion-code-section {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+            padding: 20px;
+            border-radius: 6px;
+            margin-top: 20px;
+            text-align: center;
+            display: none;
+        }
+        .completion-code-section.show {
+            display: block;
+        }
+        .completion-code-section h3 {
+            color: #2e7d32;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .completion-code-display {
+            background: white;
+            border: 2px dashed #4caf50;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        .completion-code-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1b5e20;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+            word-break: break-all;
+        }
+        .completion-code-instruction {
+            color: #2e7d32;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+        .copy-code-btn {
+            padding: 10px 20px;
+            background: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+        .copy-code-btn:hover {
+            background: #45a049;
+            box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3);
+        }
+        .hidden-form {
+            display: none;
+        }
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+            .instance-options,
+            .joint-options,
+            .category-buttons,
+            .severity-options,
+            .reason-options,
+            .low-confidence-options {
+                grid-template-columns: 1fr;
+            }
+            .rules-tabs {
+                flex-direction: column;
+            }
+            .completion-code-text {
+                font-size: 18px;
+                letter-spacing: 1px;
+            }
+            .progress-details {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .form-actions,
+            .form-actions-center {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+<!-- MTurk Hidden Form -->
+<form id="mturk-form" class="hidden-form" method="POST" action="">
+    <input type="hidden" id="assignmentId" name="assignmentId" value="">
+    <input type="hidden" id="workerId" name="workerId" value="">
+    <input type="hidden" id="hitId" name="hitId" value="">
+    <input type="hidden" id="turkSubmitTo" name="turkSubmitTo" value="">
+    <input type="hidden" id="annotations-data" name="annotations" value="">
+    <input type="hidden" id="completion-code" name="completionCode" value="">
+</form>
+<div class="container">
+    <header>
+        <h1>Joint Visibility Annotation Task</h1>
+        <!-- Progress Section -->
+        <div class="progress-section">
+            <div class="progress-header">
+                <h3>📊 Task Progress</h3>
+                <div class="progress-stats">
+                    <span id="progressText">0 / 50 annotations</span>
+                </div>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progressBar" style="width: 0%;">
+                    <span id="progressPercent">0%</span>
+                </div>
+            </div>
+            <div class="progress-details">
+                <div class="progress-item">
+                    <strong id="totalCount">0</strong>
+                    <div class="label">Total</div>
+                </div>
+                <div class="progress-item">
+                    <strong id="instance0Count">0</strong>
+                    <div class="label">Instance 0</div>
+                </div>
+                <div class="progress-item">
+                    <strong id="instance1Count">0</strong>
+                    <div class="label">Instance 1</div>
+                </div>
+                <div class="progress-item">
+                    <strong id="remaining">50</strong>
+                    <div class="label">Remaining</div>
+                </div>
+            </div>
+        </div>
+        <div class="instruction-banner">
+            <strong>How This Works:</strong>
+            <br>1. <strong>Save Annotation:</strong> Click this button after each frame to save one annotation
+            <br>2. <strong>Progress:</strong> You need 50 total annotations (25 per instance minimum)
+            <br>3. <strong>Edit Anytime:</strong> Go back to any frame and select the same joint - your previous answers will load and you can update them
+            <br>4. <strong>Complete Task:</strong> Once you reach 50, click "Complete Task" to get your completion code
+        </div>
+    </header>
+    <div class="main-content">
+        <!-- LEFT COLUMN: Video & Rules -->
+        <div>
+            <div class="video-panel">
+                <h2>Video Player</h2>
+                <video id="videoPlayer" controls>
+                    <source src="https://deepscreens.s3.us-east-2.amazonaws.com/ramona_1_1639.mp4" type="video/mp4">
+                    Your browser does not support HTML5 video.
+                </video>
+                <!-- <div class="video-controls">
+                    <button class="btn-small" type="button" onclick="togglePlayPause()" id="playPauseBtn">⏸ Pause</button>
+                </div> -->
+                <div class="frame-info">
+                    <strong id="frameNumber">Frame: 1</strong> | <span id="frameTime">0:00</span>
+                </div>
+            </div>
+            <!-- Rules Panel with Tabs -->
+            <div style="margin-top: 20px;">
+                <div class="rules-tabs">
+                    <button class="rules-tab active" onclick="switchTab('rules-definitions')">📋 Visibility Category Definitions</button>
+                    <button class="rules-tab" onclick="switchTab('rules-what-not')">Confidence Level Definitions</button>
+                    <button class="rules-tab" onclick="switchTab('rules-examples')">Examples</button>
+                </div>
+                <div class="rules-panel">
+                    <!-- Definitions Tab -->
+                    <div id="rules-definitions" class="rules-content active">
+                        <!-- <h3>📋 Category Definitions</h3> -->
+                        <div class="rule-item">
+                            <strong>VISIBLE (Category 1)</strong>
+                            <p>Joint center is in-frame AND you can identify its location to within ±10 pixels based on direct visual evidence (edge, contour, color discontinuity, or anatomical landmark).</p>
+                        </div>
+                        <div class="rule-item">
+                            <strong>OCCLUDED (Category 2)</strong>
+                            <p>An identifiable occluder is blocking direct observation of the joint (body part, clothing, external object, another character, or atmospheric effect).</p>
+                        </div>
+                        <div class="rule-item">
+                            <strong>OFF-SCREEN (Category 3)</strong>
+                            <p>Joint center is outside the frame boundaries. Completely outside the video frame.</p>
+                        </div>
+                        <div class="rule-item">
+                            <strong>AMBIGUOUS (Category 4)</strong>
+                            <p>You genuinely cannot determine the visibility status due to unclear visual evidence, pitch-dark shadows, extreme motion blur, or other factors. Always confidence 1. </p>
+                        </div>
+                        <div class="rule-item">
+                            <strong>Occlusion Severity (if Occluded)</strong>
+                            <p><strong>0:</strong> 0-25% occluded<br>
+                            <strong>1:</strong> 25-50% occluded<br>
+                            <strong>2:</strong> 50-75% occluded<br>
+                            <strong>3:</strong> 75-100% occluded</p>
+                        </div>
+                    </div>
+                    <!-- What NOT to Measure Tab -->
+                    <div id="rules-what-not" class="rules-content">
+                        <!-- <h3>❌ What Confidence Does NOT Measure</h3> -->
+                        <div class="rule-item">
+                            <strong>Confidence (1-5): How certain are you the visibility category classification is CORRECT?</strong>
+                            <p><strong>5 - Certain:</strong> No doubt. The classification is unambiguous.</p>
+                            <p><strong>4 - Fairly Sure:</strong> High confidence. Visual evidence strongly supports this classification.</p>
+                            <p><strong>3 - Moderate:</strong> Reasonably confident but some uncertainty. Visual evidence supports classification but conditions aren't perfect.</p>
+                            <p><strong>2 - Unsure:</strong> Low confidence. Visual evidence is minimal or conditions are poor, but you're still committing to a classification.</p>
+                            <p><strong>1 - Guessing:</strong> Very low confidence. You're barely confident in your classification.</p>
+                        </div>
+                        <div class="rule-item">
+                            <strong>NOT about occlusion reason</strong>
+                            <p>You can be confident a joint is Occluded (confidence 5) but uncertain whether it's self_occlusion vs external_object (reason is secondary). The classification itself is certain; only the reason is unclear.</p>
+                        </div>
+                        <div class="rule-item">
+                            <strong>NOT about occlusion severity</strong>
+                            <p>You can be confident a joint is Occluded (confidence 5) but unsure if it's 25-50% or 50-75% occluded (severity is secondary). The visibility category is certain; only the degree is uncertain.</p>
+                        </div>
+                        <div class="rule-item">
+                            <strong>NOT about image quality alone</strong>
+                            <p>Poor lighting/resolution doesn't automatically mean low confidence IF you have clear visual landmarks. Low-res image with visible knee outline = Visible with moderate-to-high confidence.</p>
+                        </div>
+                        <div class="rule-item">
+                            <strong>In Summary:</strong>
+                            <p>Confidence measures: <strong>"Am I certain about this visibility classification?"</strong></p>
+                            <p>NOT: "Am I certain about the occlusion reason?" or "Am I certain about the occlusion severity?" or "Is the image quality good?"</p>
+                        </div>
+                    </div>
+                    <!-- Examples Tab -->
+                    <div id="rules-examples" class="rules-content">
+                        <h3>✓ Examples by Category</h3>
+                        <div class="example-section">
+                            <strong>VISIBLE Example 1: Hip with Clear Skirt Indentation</strong>
+                            <p>• Woman wearing fitted skirt facing camera</p>
+                            <p>• Skirt cinches at hips creating visible indentation</p>
+                            <p>✓ Visible (1), confidence 4-5</p>
+                        </div>
+                        <div class="example-section">
+                            <strong>VISIBLE Example 2: Knee with Visible Clothing Boundary</strong>
+                            <p>• Person wearing fitted pants with visible crease</p>
+                            <p>✓ Visible (1), confidence 4-5</p>
+                        </div>
+                        <div class="example-section">
+                            <strong>VISIBLE Example 3: Low-Res Image with Visible Outline</strong>
+                            <p>• Low resolution but hip indentation/silhouette visible</p>
+                            <p>✓ Visible (1), confidence 2-3 (low)</p>
+                            <p>Reason: low_image_resolution, lighting_conditions</p>
+                        </div>
+                        <div class="example-section">
+                            <strong>OCCLUDED Example 1: Knee Hidden Under Long Skirt</strong>
+                            <p>• Woman wearing long skirt with visible hip indentation</p>
+                            <p>• Knee location is behind skirt fabric</p>
+                            <p>✓ Occluded (2), severity 2 (50-75%), confidence 4-5</p>
+                            <p>Occlusion reason: clothing</p>
+                        </div>
+                        <div class="example-section">
+                            <strong>OCCLUDED Example 2: Hand Behind Torso</strong>
+                            <p>• Person with hand positioned behind their own body</p>
+                            <p>✓ Occluded (2), severity 2-3 (50-100%), confidence 4-5</p>
+                            <p>Occlusion reason: self_occlusion</p>
+                        </div>
+                        <div class="example-section">
+                            <strong>OFF-SCREEN Example: Legs Cut Off at Bottom</strong>
+                            <p>• Character standing at bottom of frame</p>
+                            <p>• Torso and hips visible but knees/ankles beyond edge</p>
+                            <p>✓ Off-screen (3), confidence 5</p>
+                        </div>
+                        <div class="example-section">
+                            <strong>AMBIGUOUS Example: Heavy Motion Blur on Ankle</strong>
+                            <p>• Ankle location is motion-blurred across pixels</p>
+                            <p>• Cannot identify where joint center is</p>
+                            <p>✓ Ambiguous (4), confidence 1</p>
+                            <p>Reason: motion_blur</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- RIGHT COLUMN: Annotation Form -->
+        <div class="annotation-panel">
+            <div class="validation-message" id="validationMessage"></div>
+            <div class="instance-warning">
+                ⚠️ <strong>Remember:</strong> Instance 0 is always WHITE, Instance 1 is always YELLOW. But the character inside each box may change between frames!
+            </div>
+            <div class="instance-selector">
+                <label>1. Select Instance (Character)</label>
+                <div class="instance-options" id="instanceOptions">
+                    <button class="instance-btn" type="button" data-instance="0">
+                        ⬜ Instance 0<br><small>(WHITE box)</small>
+                    </button>
+                    <button class="instance-btn" type="button" data-instance="1">
+                        🟨 Instance 1<br><small>(YELLOW box)</small>
+                    </button>
+                </div>
+            </div>
+            <div class="joint-selector">
+                <label>2. Select Joint to Annotate</label>
+                <div class="joint-options" id="jointOptions">
+                    <button class="joint-btn" type="button" data-joint="root">Root</button>
+                    <button class="joint-btn" type="button" data-joint="right_knee">Right Knee</button>
+                    <button class="joint-btn" type="button" data-joint="left_knee">Left Knee</button>
+                    <button class="joint-btn" type="button" data-joint="right_ankle">Right Ankle</button>
+                    <button class="joint-btn" type="button" data-joint="left_ankle">Left Ankle</button>
+                </div>
+            </div>
+            <form id="annotationForm" class="annotation-form">
+                <div class="form-section">
+                    <label>3. Select Visibility Category - <i>READ VISIBILITY CATEGORY DEFINITIONS FIRST</i></label>
+                    <div class="category-buttons" id="categoryButtons">
+                        <button type="button" class="category-btn" data-category="visible">
+                            ✓ Visible
+                        </button>
+                        <button type="button" class="category-btn" data-category="occluded">
+                            ✗ Occluded
+                        </button>
+                        <button type="button" class="category-btn" data-category="off_screen">
+                            ⬚ Off-Screen
+                        </button>
+                        <button type="button" class="category-btn" data-category="ambiguous">
+                            ? Ambiguous
+                        </button>
+                    </div>
+                </div>
+                <div class="form-section confidence-group">
+                    <label>4. Confidence Level (How certain are you in the <i>VISIBILITY CATEGORY</i>? - Refer to Confidence Level Definitions. )</label>
+                    <input type="range" id="confidenceSlider" class="confidence-slider" min="1" max="5" value="4">
+                    <div class="confidence-value">
+                        <span id="confidenceText">4 - Fairly Sure</span>
+                    </div>
+                    <div class="confidence-labels">
+                        <span>1 - Guessing</span>
+                        <span>5 - Certain</span>
+                    </div>
+                    <div class="confidence-definition" id="confidenceDefinition">
+                        <strong>Fairly Sure:</strong> High confidence. Visual evidence strongly supports this classification.
+                    </div>
+                    <div class="confidence-not-measure" id="confidenceNotMeasure">
+                        <strong>❌ What Confidence Does NOT Measure: </strong>
+                        <!-- <h3>❌ What Confidence Does NOT Measure</h3>  -->
+                        ❌ Occlusion reason | ❌ Occlusion severity | ❌ Image quality alone
+                    </div>
+                </div>
+                <!-- LOW CONFIDENCE REASON SECTION -->
+                <div class="low-confidence-section" id="lowConfidenceSection">
+                    <label>Why is your confidence below 4? (Select all that apply)</label>
+                    <div class="low-confidence-options">
+                        <button type="button" class="low-confidence-btn" data-reason="motion_blur">
+                            Motion Blur
+                        </button>
+                        <button type="button" class="low-confidence-btn" data-reason="low_resolution">
+                            Low Image Resolution
+                        </button>
+                        <button type="button" class="low-confidence-btn" data-reason="lighting">
+                            Lighting Conditions
+                        </button>
+                        <button type="button" class="low-confidence-btn" data-reason="clothing_boundary">
+                            Unclear Boundary Between Clothing & Body
+                        </button>
+                        <button type="button" class="low-confidence-btn" data-reason="multiple_interpretations">
+                            Multiple Possible Interpretations
+                        </button>
+                        <button type="button" class="low-confidence-btn" data-reason="occlusion_confusion">
+                            Self-Occlusion vs External Occlusion Confusion
+                        </button>
+                        <button type="button" class="low-confidence-btn" data-reason="non_clear_surface">
+                            Through Non-Clear Surface/Object (blurry glass, grass, sheer curtains)
+                        </button>
+                    </div>
+                </div>
+                <!-- OCCLUDED-SPECIFIC FIELDS -->
+                <div class="conditional-section" id="occludedSection">
+                    <div class="form-section severity-group">
+                        <label>Occlusion Severity (How much is covered?)</label>
+                        <div class="severity-options">
+                            <button type="button" class="severity-btn" data-severity="0">
+                                0: 0-25% covered
+                            </button>
+                            <button type="button" class="severity-btn" data-severity="1">
+                                1: 25-50% covered
+                            </button>
+                            <button type="button" class="severity-btn" data-severity="2">
+                                2: 50-75% covered
+                            </button>
+                            <button type="button" class="severity-btn" data-severity="3">
+                                3: 75-100% covered
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-section">
+                        <label>Occlusion Reason (What's blocking it?)</label>
+                        <div class="reason-options">
+                            <button type="button" class="reason-btn" data-reason="self_occlusion">
+                                Self-Occlusion
+                            </button>
+                            <button type="button" class="reason-btn" data-reason="clothing">
+                                Clothing
+                            </button>
+                            <button type="button" class="reason-btn" data-reason="external_object">
+                                External Object
+                            </button>
+                            <button type="button" class="reason-btn" data-reason="external_character">
+                                External Character
+                            </button>
+                            <button type="button" class="reason-btn" data-reason="atmospheric">
+                                Atmospheric
+                            </button>
+                            <button type="button" class="reason-btn" data-reason="hallucinated">
+                                Hallucinated
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="annotation-summary" id="annotationSummary"></div>
+                <div class="form-actions-center">
+                    <button class="btn-small" type="button" onclick="previousFrame()">⬅ Prev Frame</button>
+                    <button type="submit" class="btn-primary">💾 Save Annotation</button>
+                    <button class="btn-small" type="button" onclick="nextFrame()">Next Frame ➜</button>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="clearForm()">Clear</button>
+                </div>
+            </form>
+            <!-- Completion Code Section -->
+            <div class="completion-code-section" id="completionCodeSection">
+                <h3>✓ Task Complete!</h3>
+                <p style="color: #2e7d32; margin-bottom: 15px;">Copy this code and paste it into the MTurk submission box:</p>
+                <div class="completion-code-display">
+                    <div class="completion-code-text" id="completionCodeText">XXXXXXXX-XXXX-XXXX</div>
+                </div>
+                <button class="copy-code-btn" onclick="copyCompletionCode()">📋 Copy Code</button>
+                <div class="completion-code-instruction">
+                    <strong>Next step:</strong> Go back to the MTurk page and paste this code into the text field, then click Submit.
+                </div>
+            </div>
+            <!-- Submit to MTurk Button -->
+            <div class="form-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-primary" id="submitBtn" onclick="submitToMTurk()" style="background: #4CAF50;" disabled>
+                    ✓ Complete Task (0/50)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ============================================================================
+    // CONSTANTS
+    // ============================================================================
+    const TOTAL_ANNOTATIONS_NEEDED = 50;
+    const ANNOTATIONS_PER_INSTANCE = 25;
+    const FPS = 30;                     // <<--- keep the same FPS you use elsewhere
+
+    // ============================================================================
+    // MTURK PARAMETER EXTRACTION
+    // ============================================================================
+    function getMTurkParameter(param) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(param);
+    }
+    function initializeMTurkForm() {
+        const assignmentId = getMTurkParameter('assignmentId');
+        const hitId = getMTurkParameter('hitId');
+        const workerId = getMTurkParameter('workerId');
+        const turkSubmitTo = getMTurkParameter('turkSubmitTo');
+        document.getElementById('assignmentId').value = assignmentId || 'ASSIGNMENT_ID_NOT_AVAILABLE';
+        document.getElementById('hitId').value = hitId || '';
+        document.getElementById('workerId').value = workerId || '';
+        document.getElementById('turkSubmitTo').value = turkSubmitTo || '';
+        if (turkSubmitTo) {
+            document.getElementById('mturk-form').action = turkSubmitTo + '/mturk/externalSubmitToServer';
+        }
+    }
+
+    // ============================================================================
+    // COMPLETION CODE GENERATION
+    // ============================================================================
+    function generateCompletionCode() {
+        const randomSegment = () => Math.random().toString(16).substr(2, 8);
+        const code = `${randomSegment()}-${randomSegment().substr(0, 4)}-${randomSegment().substr(0, 4)}`.toUpperCase();
+        return code;
+    }
+    function copyCompletionCode() {
+        const code = document.getElementById('completionCodeText').textContent;
+        navigator.clipboard.writeText(code).then(() => {
+            alert('✓ Completion code copied to clipboard!\n\nNow go back to the MTurk page and paste it into the submission box.');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            alert('Could not copy. Please manually select and copy the code.');
+        });
+    }
+
+    // ============================================================================
+    // RANDOM FRAME START
+    // ============================================================================
+    function initializeRandomFrame() {
+        const video = document.getElementById('videoPlayer');
+        if (video.readyState >= 1) {
+            setRandomStartFrame();
+        } else {
+            video.addEventListener('loadedmetadata', setRandomStartFrame);
+        }
+    }
+    function setRandomStartFrame() {
+        const video = document.getElementById('videoPlayer');
+        const totalSeconds = video.duration;
+        if (totalSeconds > 0) {
+            const minSeconds = 5;
+            const maxSeconds = totalSeconds * 0.85;
+            const randomSeconds = minSeconds + Math.random() * (maxSeconds - minSeconds);
+            video.currentTime = randomSeconds;
+            video.pause();
+        }
+    }
+
+    // ============================================================================
+    // RULES PANEL TABS
+    // ============================================================================
+    function switchTab(tabName) {
+        document.querySelectorAll('.rules-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.rules-tab').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabName).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    // ============================================================================
+    // STATE MANAGEMENT
+    // ============================================================================
+    const state = {
+        selectedInstance: null,
+        selectedJoint: null,
+        selectedCategory: null,
+        confidenceLevel: 4,
+        lowConfidenceReasons: [],
+        occlusion: {
+            severity: null,
+            reason: null
+        },
+        frameSaved: false,
+        annotations: [],
+        completionCode: null
+    };
+
+    // ============================================================================
+    // FRAME‑AWARE ANNOTATION TRACKING (SMART FEATURE)
+    // ============================================================================
+    function getFrameId() {
+        const frameNumber = parseInt(document.getElementById('frameNumber').textContent.split(': ')[1]);
+        const instance = state.selectedInstance;
+        const joint = state.selectedJoint;
+        if (instance === null || !joint) return null;
+        return `frame_${frameNumber}_instance_${instance}_joint_${joint}`;
+    }
+    function findAnnotationIndex() {
+        const frameId = getFrameId();
+        if (!frameId) return -1;
+        return state.annotations.findIndex(ann => {
+            const annFrameId = `frame_${ann.frame}_instance_${ann.instance}_joint_${ann.joint}`;
+            return annFrameId === frameId;
+        });
+    }
+    function loadAnnotationIfExists() {
+        const frameId = getFrameId();
+        if (!frameId) return;
+        const existingIndex = findAnnotationIndex();
+        if (existingIndex !== -1) {
+            const existing = state.annotations[existingIndex];
+            // ---- restore everything -------------------------------------------------
+            document.getElementById('confidenceSlider').value = existing.confidence;
+            state.confidenceLevel = existing.confidence;
+            document.getElementById('confidenceText').textContent = confidenceLabels[existing.confidence];
+            document.getElementById('confidenceDefinition').innerHTML = confidenceDefinitions[existing.confidence];
+
+            document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+            const catBtn = document.querySelector(`.category-btn[data-category="${existing.category}"]`);
+            if (catBtn) catBtn.classList.add('active');
+
+            // low‑confidence reasons (multi‑select)
+            document.querySelectorAll('.low-confidence-btn').forEach(b => b.classList.remove('active'));
+            if (existing.lowConfidenceReasons) {
+                existing.lowConfidenceReasons.forEach(r => {
+                    const btn = document.querySelector(`.low-confidence-btn[data-reason="${r}"]`);
+                    if (btn) btn.classList.add('active');
+                });
+            }
+
+            // occlusion severity / reason
+            document.querySelectorAll('.severity-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.reason-btn').forEach(b => b.classList.remove('active'));
+
+            if (existing.severity !== undefined && existing.severity !== null) {
+                const sevBtn = document.querySelector(`.severity-btn[data-severity="${existing.severity}"]`);
+                if (sevBtn) sevBtn.classList.add('active');
+            }
+            if (existing.reason) {
+                const reasBtn = document.querySelector(`.reason-btn[data-reason="${existing.reason}"]`);
+                if (reasBtn) reasBtn.classList.add('active');
+            }
+
+            // show / hide conditional sections
+            if (existing.category === 'occluded')
+                document.getElementById('occludedSection').classList.add('show');
+            else
+                document.getElementById('occludedSection').classList.remove('show');
+
+            if (existing.confidence <= 3)
+                document.getElementById('lowConfidenceSection').classList.add('show');
+            else
+                document.getElementById('lowConfidenceSection').classList.remove('show');
+
+            updateSummary();
+        }
+    }
+
+    // ============================================================================
+    // VIDEO PLAYER FUNCTIONALITY
+    // ============================================================================
+    const video = document.getElementById('videoPlayer');
+    const frameNumberDisplay = document.getElementById('frameNumber');
+    const frameTimeDisplay   = document.getElementById('frameTime');
+
+    function updateFrameInfo() {
+        const currentTime = video.currentTime;
+        const frameNumber = Math.floor(currentTime * FPS);
+        const minutes = Math.floor(currentTime / 60);
+        const seconds = Math.floor(currentTime % 60);
+        const milliseconds = Math.floor((currentTime % 1) * 100);
+        frameNumberDisplay.textContent = `Frame: ${frameNumber}`;
+        frameTimeDisplay.textContent   = `${minutes}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(2, '0')}`;
+
+        // When the user has already chosen instance + joint, try to preload any saved annotation
+        if (state.selectedInstance !== null && state.selectedJoint) {
+            loadAnnotationIfExists();
+        }
+    }
+
+    video.addEventListener('timeupdate', updateFrameInfo);
+    video.addEventListener('loadedmetadata', updateFrameInfo);
+
+    // --------------------------------------------------------------
+    // **NEW SECTION – FAST, FPS‑matched frame counter**
+    // --------------------------------------------------------------
+    let frameCounterTimer = null;                // holds the setInterval ID
+
+    function startFrameCounter() {
+        if (frameCounterTimer) return;           // already running
+        frameCounterTimer = setInterval(updateFrameInfo, 1000 / FPS);
+    }
+    function stopFrameCounter() {
+        if (frameCounterTimer) {
+            clearInterval(frameCounterTimer);
+            frameCounterTimer = null;
+        }
+    }
+
+    // Hook the start/stop logic to the video’s native events
+    video.addEventListener('play',    () => { startFrameCounter(); });
+    video.addEventListener('pause',   () => { stopFrameCounter();   updateFrameInfo(); });
+    video.addEventListener('seeking', () => { updateFrameInfo(); });
+    video.addEventListener('ended',   () => { stopFrameCounter();   updateFrameInfo(); });
+
+    // --------------------------------------------------------------
+    // NAVIGATION BUTTONS (prev / next frame)
+    // --------------------------------------------------------------
+    function nextFrame() {
+        video.currentTime += 1 / FPS;
+        video.pause();                 // always pause after a step‑forward
+    }
+    function previousFrame() {
+        video.currentTime -= 1 / FPS;
+        video.pause();                 // always pause after a step‑backward
+    }
+
+    // (If you still have a Play/Pause button, keep this handler – the
+    //  start/stop logic is now handled by the listeners above)
+    function togglePlayPause() {
+        const btn = document.getElementById('playPauseBtn');
+        if (video.paused) {
+            video.play();               // → triggers 'play' → startFrameCounter()
+            btn.textContent = '⏸ Pause';
+        } else {
+            video.pause();              // → triggers 'pause' → stopFrameCounter()
+            btn.textContent = '▶ Play';
+        }
+    }
+
+    // ============================================================================
+    // CONFIDENCE DEFINITIONS & LABELS
+    // ============================================================================
+    const confidenceDefinitions = {
+        1: '<strong>Guessing:</strong> Very low confidence. You\'re barely confident in your classification.',
+        2: '<strong>Unsure:</strong> Low confidence. Visual evidence is minimal or conditions are poor, but you\'re still committing to a classification.',
+        3: '<strong>Moderate:</strong> Reasonably confident but some uncertainty. Visual evidence supports classification but conditions aren\'t perfect.',
+        4: '<strong>Fairly Sure:</strong> High confidence. Visual evidence strongly supports this classification.',
+        5: '<strong>Certain:</strong> No doubt. The classification is unambiguous.'
+    };
+    const confidenceLabels = {
+        1: '1 - Guessing',
+        2: '2 - Unsure',
+        3: '3 - Moderate',
+        4: '4 - Fairly Sure',
+        5: '5 - Certain'
+    };
+    function getConfidenceLabel(v){ return confidenceLabels[v]; }
+
+    // ============================================================================
+    // INSTANCE SELECTION
+    // ============================================================================
+    document.querySelectorAll('.instance-btn').forEach(btn => {
+        btn.addEventListener('click', function(e){
+            e.preventDefault();
+            document.querySelectorAll('.instance-btn').forEach(b=>b.classList.remove('active'));
+            this.classList.add('active');
+            state.selectedInstance = this.dataset.instance;
+            if (state.selectedJoint) loadAnnotationIfExists();
+        });
+    });
+
+    // ============================================================================
+    // JOINT SELECTION
+    // ============================================================================
+    document.querySelectorAll('.joint-btn').forEach(btn => {
+        btn.addEventListener('click', function(e){
+            e.preventDefault();
+            document.querySelectorAll('.joint-btn').forEach(b=>b.classList.remove('active'));
+            this.classList.add('active');
+            state.selectedJoint = this.dataset.joint;
+            if (state.selectedInstance !== null) loadAnnotationIfExists();
+        });
+    });
+
+    // ============================================================================
+    // CATEGORY SELECTION
+    // ============================================================================
+    document.querySelectorAll('.category-btn').forEach(btn => {
+        btn.addEventListener('click', function(e){
+            e.preventDefault();
+            document.querySelectorAll('.category-btn').forEach(b=>b.classList.remove('active'));
+            this.classList.add('active');
+            state.selectedCategory = this.dataset.category;
+
+            // Ambiguous forces confidence = 1 & disables the slider
+            if (state.selectedCategory === 'ambiguous') {
+                confidenceSlider.value = 1;
+                state.confidenceLevel = 1;
+                confidenceText.textContent = '1 - Guessing (Ambiguous)';
+                confidenceSlider.disabled = true;
+            } else {
+                confidenceSlider.disabled = false;
+            }
+
+            // Show / hide the occlusion‑specific block
+            const occludedSection = document.getElementById('occludedSection');
+            if (state.selectedCategory === 'occluded') {
+                occludedSection.classList.add('show');
+            } else {
+                occludedSection.classList.remove('show');
+                state.occlusion.severity = null;
+                state.occlusion.reason = null;
+                document.querySelectorAll('.severity-btn').forEach(b=>b.classList.remove('active'));
+                document.querySelectorAll('.reason-btn').forEach(b=>b.classList.remove('active'));
+            }
+            updateSummary();
+        });
+    });
+
+    // ============================================================================
+    // CONFIDENCE SLIDER
+    // ============================================================================
+    const confidenceSlider = document.getElementById('confidenceSlider');
+    const confidenceText   = document.getElementById('confidenceText');
+    const confidenceDefinition = document.getElementById('confidenceDefinition');
+
+    function updateConfidenceSection() {
+        const lowConf = document.getElementById('lowConfidenceSection');
+        if (state.confidenceLevel <= 3) {
+            lowConf.classList.add('show');
+        } else {
+            lowConf.classList.remove('show');
+            state.lowConfidenceReasons = [];
+            document.querySelectorAll('.low-confidence-btn').forEach(b=>b.classList.remove('active'));
+        }
+    }
+
+    confidenceSlider.addEventListener('input', function(){
+        state.confidenceLevel = parseInt(this.value);
+        confidenceText.textContent = confidenceLabels[state.confidenceLevel];
+        confidenceDefinition.innerHTML = confidenceDefinitions[state.confidenceLevel];
+        updateConfidenceSection();
+        updateSummary();
+    });
+
+    // ============================================================================
+    // LOW CONFIDENCE REASONS (multi‑select)
+    // ============================================================================
+    document.querySelectorAll('.low-confidence-btn').forEach(btn => {
+        btn.addEventListener('click', function(e){
+            e.preventDefault();
+            const reason = this.dataset.reason;
+            if (this.classList.contains('active')) {
+                this.classList.remove('active');
+                state.lowConfidenceReasons = state.lowConfidenceReasons.filter(r=>r!==reason);
+            } else {
+                this.classList.add('active');
+                state.lowConfidenceReasons.push(reason);
+            }
+            updateSummary();
+        });
+    });
+
+    // ============================================================================
+    // OCCLUSION SEVERITY
+    // ============================================================================
+    document.querySelectorAll('.severity-btn').forEach(btn => {
+        btn.addEventListener('click', function(e){
+            e.preventDefault();
+            document.querySelectorAll('.severity-btn').forEach(b=>b.classList.remove('active'));
+            this.classList.add('active');
+            state.occlusion.severity = this.dataset.severity;
+            updateSummary();
+        });
+    });
+
+    // ============================================================================
+    // OCCLUSION REASON
+    // ============================================================================
+    document.querySelectorAll('.reason-btn').forEach(btn => {
+        btn.addEventListener('click', function(e){
+            e.preventDefault();
+            document.querySelectorAll('.reason-btn').forEach(b=>b.classList.remove('active'));
+            this.classList.add('active');
+            state.occlusion.reason = this.dataset.reason;
+            updateSummary();
+        });
+    });
+
+    // ============================================================================
+    // FORM VALIDATION & SUBMIT
+    // ============================================================================
+    function validateForm() {
+        const errors = [];
+        if (state.selectedInstance === null) errors.push('Please select an instance (0 or 1).');
+        if (!state.selectedJoint)               errors.push('Please select a joint.');
+        if (!state.selectedCategory)            errors.push('Please select a visibility category.');
+        if (state.confidenceLevel <= 3 && state.lowConfidenceReasons.length===0)
+            errors.push('Select at least one low‑confidence reason.');
+        if (state.selectedCategory === 'occluded') {
+            if (state.occlusion.severity===null) errors.push('Select occlusion severity.');
+            if (!state.occlusion.reason)          errors.push('Select occlusion reason.');
+        }
+        return errors;
+    }
+    function showValidationMessage(msg, isError=true){
+        const el = document.getElementById('validationMessage');
+        el.textContent = msg;
+        el.classList.remove('error','success');
+        el.classList.add(isError ? 'error' : 'success');
+        el.scrollIntoView({behavior:'smooth'});
+    }
+
+    function updateSummary() {
+        const sum = document.getElementById('annotationSummary');
+        let txt = '';
+        if (state.selectedInstance !== null) {
+            const label = state.selectedInstance==='0' ? '⬜ Instance 0' : '🟨 Instance 1';
+            txt += `<strong>Instance:</strong> ${label}<br>`;
+        }
+        if (state.selectedJoint) txt += `<strong>Joint:</strong> ${state.selectedJoint.replace(/_/g,' ')}<br>`;
+        if (state.selectedCategory) {
+            let cat = state.selectedCategory.replace(/_/g,' ');
+            if (state.selectedCategory==='ambiguous') cat += ' (Auto Confidence: 1)';
+            txt += `<strong>Category:</strong> ${cat}<br>`;
+        }
+        txt += `<strong>Confidence:</strong> ${confidenceLabels[state.confidenceLevel]}<br>`;
+        if (state.confidenceLevel <= 3 && state.lowConfidenceReasons.length)
+            txt += `<strong>Reasons:</strong> ${state.lowConfidenceReasons.map(r=>r.replace(/_/g,' ')).join(', ')}<br>`;
+        if (state.selectedCategory==='occluded') {
+            if (state.occlusion.severity!==null) txt += `<strong>Severity:</strong> ${state.occlusion.severity}<br>`;
+            if (state.occlusion.reason)          txt += `<strong>Reason:</strong> ${state.occlusion.reason.replace(/_/g,' ')}<br>`;
+        }
+        if (txt) {
+            sum.innerHTML = txt;
+            sum.classList.add('show');
+        } else {
+            sum.classList.remove('show');
+        }
+    }
+
+    function updateProgress() {
+        const total   = state.annotations.length;
+        const i0      = state.annotations.filter(a=>a.instance==='0').length;
+        const i1      = state.annotations.filter(a=>a.instance==='1').length;
+        const remaining = Math.max(0, TOTAL_ANNOTATIONS_NEEDED - total);
+        const percent = (total / TOTAL_ANNOTATIONS_NEEDED) * 100;
+
+        document.getElementById('progressBar').style.width = Math.min(percent,100)+'%';
+        document.getElementById('progressPercent').textContent = Math.floor(percent)+'%';
+        document.getElementById('progressText').textContent = `${total} / ${TOTAL_ANNOTATIONS_NEEDED} annotations`;
+        document.getElementById('totalCount').textContent = total;
+        document.getElementById('instance0Count').textContent = i0;
+        document.getElementById('instance1Count').textContent = i1;
+        document.getElementById('remaining').textContent = remaining;
+
+        const submitBtn = document.getElementById('submitBtn');
+        if (total >= TOTAL_ANNOTATIONS_NEEDED && i0 >= ANNOTATIONS_PER_INSTANCE && i1 >= ANNOTATIONS_PER_INSTANCE)
+            submitBtn.disabled = false;
+        else
+            submitBtn.disabled = true;
+
+        submitBtn.textContent = `✓ Complete Task (${total}/${TOTAL_ANNOTATIONS_NEEDED})`;
+    }
+
+    // ----------------------------------------------------------------
+    // FORM SUBMISSION (WITH SMART FRAME UPDATES)
+    // ----------------------------------------------------------------
+    document.getElementById('annotationForm').addEventListener('submit', function(e){
+        e.preventDefault();
+        const errors = validateForm();
+        if (errors.length) {
+            showValidationMessage(errors.join(' '), true);
+            return;
+        }
+
+        const annotation = {
+            instance: state.selectedInstance,
+            joint:    state.selectedJoint,
+            category: state.selectedCategory,
+            confidence: state.confidenceLevel,
+            frame:   parseInt(document.getElementById('frameNumber').textContent.split(': ')[1]),
+            timestamp: video.currentTime,
+            ...(state.confidenceLevel <= 3 && { lowConfidenceReasons: state.lowConfidenceReasons }),
+            ...(state.selectedCategory === 'occluded' && { severity: state.occlusion.severity, reason: state.occlusion.reason })
+        };
+
+        const existingIdx = findAnnotationIndex();
+        if (existingIdx !== -1) {
+            state.annotations[existingIdx] = annotation;
+            showValidationMessage('✓ Annotation updated!', false);
+        } else {
+            state.annotations.push(annotation);
+            showValidationMessage('✓ Annotation saved! Moving to next frame…', false);
+        }
+
+        state.frameSaved = true;
+        updateProgress();
+
+        setTimeout(() => {
+            clearForm();
+            nextFrame();
+        }, 800);
+    });
+
+    function clearForm() {
+        state.selectedInstance = null;
+        state.selectedJoint = null;
+        state.selectedCategory = null;
+        state.confidenceLevel = 4;
+        state.lowConfidenceReasons = [];
+        state.occlusion.severity = null;
+        state.occlusion.reason = null;
+
+        document.querySelectorAll('.instance-btn,.joint-btn,.category-btn,.severity-btn,.reason-btn,.low-confidence-btn')
+                .forEach(b=>b.classList.remove('active'));
+
+        confidenceSlider.value = 4;
+        confidenceSlider.disabled = false;
+        confidenceText.textContent = '4 - Fairly Sure';
+        confidenceDefinition.innerHTML = confidenceDefinitions[4];
+
+        document.getElementById('occludedSection')      .classList.remove('show');
+        document.getElementById('lowConfidenceSection') .classList.remove('show');
+        document.getElementById('annotationSummary')    .classList.remove('show');
+        document.getElementById('validationMessage')    .classList.remove('error','success');
+        updateSummary();
+    }
+
+    // ----------------------------------------------------------------
+    // MTURK SUBMISSION
+    // ----------------------------------------------------------------
+    function submitToMTurk() {
+        const i0 = state.annotations.filter(a=>a.instance==='0').length;
+        const i1 = state.annotations.filter(a=>a.instance==='1').length;
+        const total = state.annotations.length;
+
+        if (total < TOTAL_ANNOTATIONS_NEEDED ||
+            i0 < ANNOTATIONS_PER_INSTANCE ||
+            i1 < ANNOTATIONS_PER_INSTANCE) {
+            alert(`Please finish the required annotations:\nInstance 0: ${i0}/${ANNOTATIONS_PER_INSTANCE}\nInstance 1: ${i1}/${ANNOTATIONS_PER_INSTANCE}\nTotal: ${total}/${TOTAL_ANNOTATIONS_NEEDED}`);
+            return;
+        }
+
+        // ----- generate completion code ---------------------------------
+        state.completionCode = generateCompletionCode();
+        document.getElementById('completion-code').value = state.completionCode;
+        document.getElementById('completionCodeText').textContent = state.completionCode;
+        document.getElementById('completionCodeSection').classList.add('show');
+        document.getElementById('submitBtn').style.display = 'none';
+
+        // ----- dump the annotations --------------------------------------
+        document.getElementById('annotations-data').value = JSON.stringify(state.annotations, null, 2);
+        showValidationMessage('✓ All done! Copy the code below and paste it into the MTurk submission box.', false);
+    }
+
+    // ----------------------------------------------------------------
+    // INITIALISATION
+    // ----------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+        initializeMTurkForm();
+        updateProgress();
+        confidenceDefinition.innerHTML = confidenceDefinitions[4];
+        initializeRandomFrame();        // pick a random start point
+    });
+</script>
+</body>
+</html>
+
+							<script>
+                            	
+							</script>
+                        </body>
+                        </html>
+                    
