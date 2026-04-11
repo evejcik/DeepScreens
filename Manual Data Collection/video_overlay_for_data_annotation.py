@@ -180,11 +180,12 @@ def resize_frame_to_match(frame1, frame2):
     return frame2
 
 
-def new_df(data, keypoint_id2name, keypoint_name2id, joint):
+def new_df(data, keypoint_id2name, keypoint_name2id, joint, start):
     rows = []
     seen_keys = set()
     for frame in data['instance_info']:
-        frame_id = int(frame['frame_id']) - 1
+        frame_id = int(frame['frame_id']) - 1 + (start if start else 0)
+        
         for instance_ind, instance in enumerate(frame.get('instances', [])):
             track_id = instance.get('track_id', None)
             keypoints = instance.get('keypoints', [])
@@ -293,7 +294,7 @@ def main(mp4_path, json_path, start, end, create_new_df_flag,
             os.remove("rows_df.csv")
         df = new_df(json_data,
                     meta['keypoint_id2name'], meta['keypoint_name2id'],
-                    joint)
+                    joint, start)
 
         df = add_geometric_plausibility(df, json_data, conf_threshold=0.3)
 
