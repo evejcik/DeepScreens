@@ -8,6 +8,8 @@ import numpy as np
 import argparse
 import os
 import glob
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 #1. encode reliability category as integer: trust = 0, partial trust = 1, don't trust = 2
 #2. encode joint_name as integer (0 - 16), using H36M mapping from mmpose
@@ -101,6 +103,12 @@ def reliability_int(df):
     print(f"Count distribution:\n{df['reliability_category_int'].value_counts()}")
     return df
 
+def clean_nans(df):
+    cols = ['geom_plausible', 'bone_length', 'geom_flag', 'bone_ratio']
+    df[cols] = df[cols].fillna(-1)
+
+    return df
+
 def joint_mapping(df):
 
     df["joint_id"] = df["joint_name"].map(RTMW_TO_H36M_ID)  # NaN for unmapped
@@ -187,6 +195,7 @@ def data_loader(csv_path):
     df = joint_mapping(df)
     # print(f"Type df joint_mapping: {type(df)}")
     df = is_valid(df)
+    df = clean_nans(df)
 
     # print(f"Type df: {type(df)}")
     print(df.columns)
@@ -209,17 +218,16 @@ def confidence_mean_rolling(df, k):
     df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
     df['confidence_mean_wk'] = (df.groupby(['film', 'instance_id', 'joint_id'])['mmpose_confidence'].transform(
         lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).mean())
-        )
-    
+    )
     # print(rolling_confidence)
     return df
 
- def confidence_std_rolling(df, k):
+def confidence_std_rolling(df, k):
     #we want by: film, instance, frame, joint
     df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
     df['confidence_std_wk'] = (df.groupby(['film', 'instance_id', 'joint_id'])['mmpose_confidence'].transform(
         lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).std())
-        )
+    )
     
     # print(rolling_confidence)
     return df
@@ -273,20 +281,60 @@ def frames_since_trust(df):
     results = {}
     for (film, instance_id, joint_name), group in df.groupby(['film', 'instance_id', 'joint_name']):
         frames_since_trust = -1
-        for idx, row in group.itterows():
-            frames_since_trust = 0 if row['reliability_category_int'] == 0 else frames_since_trust +=1 if frame_since_trust >= 0 else frames_since_trust = -1
+        for idx, row in group.iterrows():
+            frames_since_trust = 0 if row['reliability_category_int'] == 0 else frames_since_trust + 1 if frames_since_trust >= 0 else -1
             results[idx] = frames_since_trust
     df['frames_since_trust'] = pd.Series(results)
+    return df
+
+
+### Data Checking ###
+def data_checking(df):
+    print(f"Reliability counts: {df['reliability_category_int'].value_counts()}")
+    print(f"Final columns: {df.columns}")
+    print(f"Shape final df: {df.shape}")
+
+    print(f"Max frames since trust: {df['frames_since_trust'].max()}")
+
+    print(f"Frames more than 20 away from a trust: {(df['frames_since_trust'] > 20).sum()}")
+    print(f"Percentage of frames more than 20 away from a trust: {(df['frames_since_trust'] > 20).sum()/df.shape[0]}")
+
+    feature_cols = [
+        'reliability_category_int',
+        'mmpose_confidence',
+        'confidence_mean_wk',
+        'confidence_std_wk', 
+        'position_velocity',
+        'position_acceleration',
+        'position_std_x_wk',
+        'position_std_y_wk',
+        'frames_since_trust'
+    ]
+
+    corr_matrix = df[feature_cols].corr()
+    print(corr_matrix)
+
+
+    sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='coolwarm', vmin=-1, vmax=1)
+    plt.tight_layout()
+    plt.savefig('correlation_matrix.png')
+
 
 
 def main(csv,k):
     df = data_loader(csv)
+
     df = confidence_mean_rolling(df, k)
     df = position_mean_rolling(df, k)
     df = position_std_rolling(df,k)
     df = position_velocity(df)
     df = position_acceleration(df)
     df = frames_since_trust(df)
+
+    df = df.drop(columns = ['joint_name.1'], errors = 'ignore')
+    data_checking(df)
+
+    
 
 
 
