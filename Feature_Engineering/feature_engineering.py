@@ -207,15 +207,49 @@ def data_loader(csv_path):
 def confidence_mean_rolling(df, k):
     #we want by: film, instance, frame, joint
     df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
-    df['confidence_mean_wk'] = (df.groupby(['film', 'instance_id', 'frame_id','joint_id'])['mmpose_confidence'].transform(
+    df['confidence_mean_wk'] = (df.groupby(['film', 'instance_id', 'joint_id'])['mmpose_confidence'].transform(
         lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).mean())
         )
     
     # print(rolling_confidence)
     return df
 
-def confidence_std(df):
+ def confidence_std_rolling(df, k):
+    #we want by: film, instance, frame, joint
+    df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
+    df['confidence_std_wk'] = (df.groupby(['film', 'instance_id', 'joint_id'])['mmpose_confidence'].transform(
+        lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).std())
+        )
     
+    # print(rolling_confidence)
+    return df
+
+def position_mean_rolling(df):
+    df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
+    df['position_mean_x_wk'] = df.groupby(['film', 'instance_id', 'joint_id'])['x'].transform(
+        lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).mean()
+    )
+    
+    df['position_mean_y_wk'] = df.groupby(['film', 'instance_id', 'joint_name'])['y'].transform(
+        lambda y: y.rolling(window=2*k+1, center=True, min_periods=1).mean()
+    )
+
+    return df
+
+def position_std_rolling(df):
+    df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
+    df['position_std_x_wk'] = df.groupby(['film', 'instance_id', 'joint_id'])['x'].transform(
+        lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).std()
+    )
+    
+    df['position_std_y_wk'] = df.groupby(['film', 'instance_id', 'joint_name'])['y'].transform(
+        lambda y: y.rolling(window=2*k+1, center=True, min_periods=1).std()
+    )
+
+    return df
+
+def position_velocity(df):
+
 
     
 
