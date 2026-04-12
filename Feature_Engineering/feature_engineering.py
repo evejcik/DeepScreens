@@ -122,7 +122,7 @@ def convert_rtmw_to_h36m17(coords: np.ndarray) -> np.ndarray:
     coords: (133, 2) or (133, 3) array of RTMW keypoints
     returns: (17, coords.shape[1]) H36M keypoints
     """
-    print(f"Coords ndim: {coords.ndim}, Coords shape: {coords.shape}")
+    # print(f"Coords ndim: {coords.ndim}, Coords shape: {coords.shape}")
     assert coords.ndim == 2 and coords.shape[0] >= 17
 
     NAME2ID = RTMW_TO_H36M_ID  # reuse the dict above, only the 1:1 joints
@@ -211,6 +211,7 @@ def data_loader(csv_path):
     # df = df_pd.sort_values(['track_id', 'joint_name', 'frame_id'])
     
     # X = build_model_input(df)  # (T, 17, 2)
+    df['geom_plausible'] = df['geom_plausible'].map({True: 1, False: 0, -1: -1})
     return df
 
 def confidence_mean_rolling(df, k):
@@ -287,6 +288,14 @@ def frames_since_trust(df):
     df['frames_since_trust'] = pd.Series(results)
     return df
 
+def film_int_encoding(df):
+    film_map = {film: idx for idx, film in enumerate(df['film'].unique())}
+
+    df['film_id'] = df['film'].map(film_map)
+
+    print(f"UNIQUE FILMS: {df['film'].unique()}")
+    print(f"UNIQUE FILMS IDS: {df['film_id'].unique()}")
+    return df
 
 ### Data Checking ###
 def data_checking(df):
@@ -299,10 +308,12 @@ def data_checking(df):
     print(f"Frames more than 20 away from a trust: {(df['frames_since_trust'] > 20).sum()}")
     print(f"Percentage of frames more than 20 away from a trust: {(df['frames_since_trust'] > 20).sum()/df.shape[0]}")
 
+    print(f"Geom plausible values: {df['geom_plausible'].value_counts(dropna=False)}")
+
     feature_cols = [
         'reliability_category_int',
         'mmpose_confidence',
-        'confidence_mean_wk',
+        # 'confidence_mean_wk',
         'confidence_std_wk', 
         'position_velocity',
         'position_acceleration',
@@ -319,6 +330,11 @@ def data_checking(df):
     plt.tight_layout()
     plt.savefig('correlation_matrix.png')
 
+    print(df[df['joint_name'] == 'right_hip']['joint_id'].value_counts())
+    print(df[df['joint_name'] == 'left_elbow']['joint_id'].value_counts())
+    print(df[df['joint_name'].isin([7, 12])][['joint_name', 'joint_id', 'film']].head(20))
+    print(df['joint_name'].unique())
+
 
 
 def main(csv,k):
@@ -331,8 +347,17 @@ def main(csv,k):
     df = position_velocity(df)
     df = position_acceleration(df)
     df = frames_since_trust(df)
+    df = film_int_encoding(df)
 
-    df = df.drop(columns = ['joint_name.1'], errors = 'ignore')
+
+    df = df.drop(columns = [
+                            'joint_name.1', 
+                            'valid instance bbox', 
+                            'reliability_category', 
+                            'confidence_mean_wk',
+                            'x_velocity',
+                            'y_velocity'
+                            ], errors = 'ignore')
     data_checking(df)
 
     
