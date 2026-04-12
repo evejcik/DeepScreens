@@ -270,31 +270,13 @@ def position_acceleration(df):
     return df
 
 def frames_since_trust(df):
-    trust_frame = -1
-
-    for (film, instance_id), track_group in df.groupby(['film', 'instance_id', 'joint_id']):
-        frames = []
-        if 
-
-
-        
-        for frame_id, frame_group in track_group.groupby('frame_id'):
-            if len(frame_group) < required_joints:
-                continue
-            frame_group = frame_group.sort_values('joint_id')
-            coords = frame_group[["x", "y"]].to_numpy()
-            frames.append(coords)
-        
-        if frames:
-            result[(film, instance_id)] = np.stack(frames, axis=0)
-    df = df.groupby(['film', 'instance_id', 'joint_id'])['reliability_category_int']
-    for _, group in df
-    for i in range(max(frame_id))
-    df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
-    df['confidence_mean_wk'] = (df.groupby(['film', 'instance_id', 'joint_id'])['reliability_category_int'].transform(
-        lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).mean())
-        )
-    df = df.groupby()
+    results = {}
+    for (film, instance_id, joint_name), group in df.groupby(['film', 'instance_id', 'joint_name']):
+        frames_since_trust = -1
+        for idx, row in group.itterows():
+            frames_since_trust = 0 if row['reliability_category_int'] == 0 else frames_since_trust +=1 if frame_since_trust >= 0 else frames_since_trust = -1
+            results[idx] = frames_since_trust
+    df['frames_since_trust'] = pd.Series(results)
 
 
 def main(csv,k):
@@ -304,6 +286,7 @@ def main(csv,k):
     df = position_std_rolling(df,k)
     df = position_velocity(df)
     df = position_acceleration(df)
+    df = frames_since_trust(df)
 
 
 
