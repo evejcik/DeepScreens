@@ -3,15 +3,17 @@
 
 
 
-import pandaas as pd
+import pandas as pd
 import numpy as np
 import argparse
+import os
+import glob
 
 #1. encode reliability category as integer: trust = 0, partial trust = 1, don't trust = 2
 #2. encode joint_name as integer (0 - 16), using H36M mapping from mmpose
 #3. handle missing values for 'valid' -> 0 if 0 else 1
-#4. sort films by (film, track_id, joint_name) -> make sure to not mix joints or tracks when computing temporal windows!
-#5. group by: (film, track_id, joint_name), sort by frame_id:
+#4. sort films by (film, instance_id, joint_name) -> make sure to not mix joints or tracks when computing temporal windows!
+#5. group by: (film, instance_id, joint_name), sort by frame_id:
     #a. confidence_mean_wk = rolling mean of confidence_scores over a +-k frame window
     #b confidence_std
     #c. position_velocity = Euclidean distance between (x,y) at frame t and t-1
@@ -37,20 +39,67 @@ RTMW_TO_H36M_ID = {
     # computed joints (spine, thorax, etc.) can't be mapped 1:1 from a name alone
     }
 
+RTMW_NAME2SRC_ID = {
+    "nose": 0, "left_eye": 1, "right_eye": 2,
+    "left_ear": 3, "right_ear": 4,
+    "left_shoulder": 5, "right_shoulder": 6,
+    "left_elbow": 7, "right_elbow": 8,
+    "left_wrist": 9, "right_wrist": 10,
+    "left_hip": 11, "right_hip": 12,
+    "left_knee": 13, "right_knee": 14,
+    "left_ankle": 15, "right_ankle": 16,
+}
+
+def csv_stack(path_to_csvs: str) -> pd.DataFrame:
+    files = glob.glob(os.path.join(path_to_csvs, "*.csv"))
+    if not files:
+        raise ValueError(f"No CSVs found in {path_to_csvs}")
+
+    dfs = []
+
+    for f in files:
+        filename = os.path.basename(f)
+        film_name = "_".join(filename.split(" ")[2:4])
+        csv = pd.read_csv(f)
+        csv['film'] = film_name
+        dfs.append(csv)
+    # df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+    # filename
+    df = pd.concat(dfs, ignore_index = True)
+    return df
+
 def reliability_int(df):
     trust_map = {
         "trust" : 0,
         "don't trust" : 2,
-        "partial trust" : 1
+        "partial trust" : 1,
+        "ambiguous" : 3
     }
 
+    # see every unique raw value coming in before mapping
+    print(df['reliability_category'].unique())
+
+    # see how many NaNs exist before mapping vs after
+    print(f"NaNs before mapping: {df['reliability_category'].isna().sum()}")
+    
+
     df['reliability_category_int'] = df['reliability_category'].map(trust_map)
+    df = df.dropna(subset = 'reliability_category')
+    print(f"NaNs after mapping: {df['reliability_category_int'].isna().sum()}")
 
     mask = df['reliability_category_int'].isna()
-    errors_df = df.loc[mask, ['reliability_category', 'reliability_category_int']]
+    if mask.any():
+        errors_df = df.loc[mask, ['film', 'frame_id', 'reliability_category', 'reliability_category_int']]
 
-    print(f"Count distribution: {df['reliability_category_int'].nunique()}")
-    print(df.loc[df['reliability_category_int']].isna(), 'reliability_category')
+        pd.set_option('display.max_rows', None)
+
+        print(f"Unmapped reliability values:\n{errors_df}")
+        # print(df['reliability_category'].unique())
+        pd.reset_option('display.max_rows')
+
+
+    print(f"Count distribution:\n{df['reliability_category_int'].value_counts()}")
+    return df
 
 def joint_mapping(df):
 
@@ -65,12 +114,13 @@ def convert_rtmw_to_h36m17(coords: np.ndarray) -> np.ndarray:
     coords: (133, 2) or (133, 3) array of RTMW keypoints
     returns: (17, coords.shape[1]) H36M keypoints
     """
+    print(f"Coords ndim: {coords.ndim}, Coords shape: {coords.shape}")
     assert coords.ndim == 2 and coords.shape[0] >= 17
 
     NAME2ID = RTMW_TO_H36M_ID  # reuse the dict above, only the 1:1 joints
 
     def get(name):
-        return coords[NAME2ID_RTMW[name]]  # your source index from mmpose json
+        return coords[NAME2ID_RTMW[name]]  
 
     ls, rs = get("left_shoulder"), get("right_shoulder")
     lh, rh = get("left_hip"),      get("right_hip")
@@ -102,29 +152,70 @@ def convert_rtmw_to_h36m17(coords: np.ndarray) -> np.ndarray:
 
     return h36m
 
+def build_model_input(df: pd.DataFrame, required_joints: int = 12) -> dict:
+    """
+    Returns dict of {(film, track_id): (T, 17, 2)} arrays
+    Skips frames with fewer than required_joints annotated.
+    """
+    result = {}
+    
+    for (film, instance_id), track_group in df.groupby(['film', 'instance_id']):
+        frames = []
+        for frame_id, frame_group in track_group.groupby('frame_id'):
+            if len(frame_group) < required_joints:
+                continue
+            frame_group = frame_group.sort_values('joint_id')
+            coords = frame_group[["x", "y"]].to_numpy()
+            frames.append(coords)
+        
+        if frames:
+            result[(film, instance_id)] = np.stack(frames, axis=0)  # (T, n_joints, 2)
+    
+    return result
+
+def is_valid(df):
+    df['valid'] = df['valid'].apply(lambda x: 0 if x == 0 else 1)
+    return df
+
 def data_loader(csv_path):
-    df = pd.read(csv_path)
+    df = csv_stack(csv_path)
+    print(f"Columns: {df.columns}")
+    # df = pd.read_csv(csv_path)
+    # print(f"Type df csv: {type(df)}")
     df = reliability_int(df)
+    # print(f"Type df reliability_int: {type(df)}")
     df = joint_mapping(df)
+    # print(f"Type df joint_mapping: {type(df)}")
+    df = is_valid(df)
 
-    df['h36m17_x_y_coords'] = convert_rtmw_to_h36m17(zip(df['x'], df['y']))
+    # print(f"Type df: {type(df)}")
+    print(df.columns)
 
+    # print(df.head(5))
+    df = df.sort_values(['film','instance_id', 'joint_name', 'frame_id'])
+    # df = df.groupby(by = ['track_id', 'joint_name'])
 
+    # df_pd = pd.DataFrame(df)
+    # print(df.first())
+    print(df.iloc[:5, :])
 
-def main(csv, json_path):
-    df = data_loader(csv)
+    # df = df_pd.sort_values(['track_id', 'joint_name', 'frame_id'])
+    
+    X = build_model_input(df)  # (T, 17, 2)
+    return X
 
+def confidence_mean_rolling(k):
     
 
-
+def main(csv):
+    df = data_loader(csv)
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--csv")
-    ap.add_argument("--json", default = '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/ramona-demo-clip copy 2/ramona-demo-clip/segment_1_1639.json')
+    ap.add_argument("--csv", default = "../ANNOTATED_CSVS")
+
 
     args = ap.parse_args()
     main(
-        args.csv, 
-        args.json
+        args.csv
     )
