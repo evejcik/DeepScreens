@@ -201,21 +201,36 @@ def data_loader(csv_path):
 
     # df = df_pd.sort_values(['track_id', 'joint_name', 'frame_id'])
     
-    X = build_model_input(df)  # (T, 17, 2)
-    return X
+    # X = build_model_input(df)  # (T, 17, 2)
+    return df
 
-def confidence_mean_rolling(k):
+def confidence_mean_rolling(df, k):
+    #we want by: film, instance, frame, joint
+    df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
+    df['confidence_mean_wk'] = (df.groupby(['film', 'instance_id', 'frame_id','joint_id'])['mmpose_confidence'].transform(
+        lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).mean())
+        )
+    
+    # print(rolling_confidence)
+    return df
+
+def confidence_std(df):
     
 
-def main(csv):
+    
+
+def main(csv,k):
     df = data_loader(csv)
+    confidence_mean_rolling(df, k)
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", default = "../ANNOTATED_CSVS")
+    ap.add_argument("--k", type = int, default = 5)
 
 
     args = ap.parse_args()
     main(
-        args.csv
+        args.csv,
+        args.k
     )
