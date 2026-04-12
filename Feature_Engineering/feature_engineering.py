@@ -224,7 +224,7 @@ def confidence_mean_rolling(df, k):
     # print(rolling_confidence)
     return df
 
-def position_mean_rolling(df):
+def position_mean_rolling(df, k):
     df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
     df['position_mean_x_wk'] = df.groupby(['film', 'instance_id', 'joint_id'])['x'].transform(
         lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).mean()
@@ -236,7 +236,7 @@ def position_mean_rolling(df):
 
     return df
 
-def position_std_rolling(df):
+def position_std_rolling(df,k):
     df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
     df['position_std_x_wk'] = df.groupby(['film', 'instance_id', 'joint_id'])['x'].transform(
         lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).std()
@@ -249,13 +249,63 @@ def position_std_rolling(df):
     return df
 
 def position_velocity(df):
+    #Euclidean distance between (x,y) at frame t and t-1
 
-
+    df['x_velocity'] = df.groupby(['film', 'instance_id', 'joint_name'])['x'].transform(
+        lambda x : x.diff()
+    )
+    df['y_velocity'] = df.groupby(['film', 'instance_id', 'joint_name'])['y'].transform(
+        lambda y : y.diff()
+    )
     
+    df['position_velocity'] = np.sqrt(df['x_velocity']**2 + df['y_velocity']**2)
+
+    return df
+
+def position_acceleration(df):
+    df['acceleration'] = df.groupby(['film', 'instance_id', 'joint_name'])['position_velocity'].transform(
+        lambda x : x.diff()
+    )
+
+    return df
+
+def frames_since_trust(df):
+    trust_frame = -1
+
+    for (film, instance_id), track_group in df.groupby(['film', 'instance_id', 'joint_id']):
+        frames = []
+        if 
+
+
+        
+        for frame_id, frame_group in track_group.groupby('frame_id'):
+            if len(frame_group) < required_joints:
+                continue
+            frame_group = frame_group.sort_values('joint_id')
+            coords = frame_group[["x", "y"]].to_numpy()
+            frames.append(coords)
+        
+        if frames:
+            result[(film, instance_id)] = np.stack(frames, axis=0)
+    df = df.groupby(['film', 'instance_id', 'joint_id'])['reliability_category_int']
+    for _, group in df
+    for i in range(max(frame_id))
+    df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
+    df['confidence_mean_wk'] = (df.groupby(['film', 'instance_id', 'joint_id'])['reliability_category_int'].transform(
+        lambda x: x.rolling(window=2*k+1, center=True, min_periods=1).mean())
+        )
+    df = df.groupby()
+
 
 def main(csv,k):
     df = data_loader(csv)
-    confidence_mean_rolling(df, k)
+    df = confidence_mean_rolling(df, k)
+    df = position_mean_rolling(df, k)
+    df = position_std_rolling(df,k)
+    df = position_velocity(df)
+    df = position_acceleration(df)
+
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
