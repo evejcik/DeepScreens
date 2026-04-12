@@ -334,6 +334,11 @@ def data_checking(df):
     print(df[df['joint_name'] == 'left_elbow']['joint_id'].value_counts())
     print(df[df['joint_name'].isin([7, 12])][['joint_name', 'joint_id', 'film']].head(20))
     print(df['joint_name'].unique())
+    pd.set_option('display.max_columns', None)
+        
+    print(df.groupby('film')['joint_name'].unique())
+    pd.reset_option('display.max_columns')
+    print(df.groupby(['film', 'joint_name']).size().unstack(fill_value=0))
 
 
 
@@ -359,6 +364,8 @@ def main(csv,k):
                             'y_velocity'
                             ], errors = 'ignore')
     data_checking(df)
+    df.to_csv('Long Data.csv', index = False)
+    print("Final Data saved.")
 
     
 
