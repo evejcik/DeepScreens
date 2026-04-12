@@ -4,6 +4,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (classification_report, confusion_matrix,
                              ConfusionMatrixDisplay)
+
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, roc_auc_score
 from sklearn.model_selection import train_test_split, GroupKFold
 from sklearn.pipeline import Pipeline
 import lightgbm as lgb
@@ -43,12 +45,12 @@ PSYCHO_JOINTS = ['left_elbow', 'right_hip', 'left_hip', 'left_shoulder', 'right_
 
 # Class weights: inverse frequency, emphasising dont_trust precision
 # trust=0 (69.6%), partial_trust=1 (6.5%), dont_trust=2 (23.4%)
-# CLASS_WEIGHTS = {0: 1.0, 1: 4.0, 2: 2.0}
-CLASS_WEIGHTS = {'Moonlight_1_1529': 1.0, 'Ramona_1_1639': 4.0, 'Tron_2059_2148' : 2.0} #for legibility
+CLASS_WEIGHTS = {0: 1.0, 1: 4.0, 2: 2.0}
+# CLASS_WEIGHTS = {'Moonlight_1_1529': 1.0, 'Ramona_1_1639': 4.0, 'Tron_2059_2148' : 2.0} #for legibility
 
 # ── 1. Prepare data ───────────────────────────────────────────────────────────
 
-def cross_validation(df, k = 3):
+def lightGBM_clf(df, k = 3):
     #k is number of unique films we're passing in here
     data = pd.read_csv(df)
     print(data.isnull().sum()[data.isnull().sum() > 0])
@@ -70,32 +72,69 @@ def cross_validation(df, k = 3):
 
         X_train, X_val = X.iloc[train_index], X.iloc[val_index]
         y_train, y_val = y.iloc[train_index], y.iloc[val_index]
+        sample_weights = y_train.map(CLASS_WEIGHTS)
 
-        print("Train joint_ids:", sorted(X_train['joint_id'].unique()))
-        print("Test joint_ids:", sorted(X_test['joint_id'].unique()))
 
-        print("Train frames_since_trust mean:", X_train['frames_since_trust'].mean())
-        print("Test frames_since_trust mean:", X_test['frames_since_trust'].mean())
+        # X_train = scaler.fit_transform(X_train)
+        # X_val = scaler.transform(X_val)
 
-        print("Train class dist:", y_train.value_counts().to_dict())
-        print("Psycho class dist:", y_test.value_counts().to_dict())
+        lgb_train = lgb.Dataset(X_train, label=y_train, weight=sample_weights)
+        lgb_valid = lgb.Dataset(X_test, label = y_test, reference = lgb_train)
+        ###lLGBM
 
-        print("X_train scaled mean:", X_train.mean(axis=0))
-        print("X_test scaled mean:", X_test.mean(axis=0))
+        params={
+            "objective":"multiclass",
+            "metric":["multi_logloss","multi_error"],
+            "boosting_type":"gbdt",
+            "num_class" : 3,
+            "learning_rate":0.05,
+            "num_leaves":31,
+            "max_depth":-1,
+            "feature_fraction":0.8,
+            "bagging_fraction":0.8,
+            "bagging_freq":5,
+            "lambda_l1":0.1,
+            "lambda_l2":0.2,
+            "min_data_in_leaf":20,
+            "verbose":-1
+            }
 
-        print(test_data[['joint_name', 'frames_since_trust', 'mmpose_confidence', 'reliability_category_int']].groupby('joint_name').mean())
-
-        X_train = scaler.fit_transform(X_train)
-        X_val = scaler.transform(X_val)
-
-        ###log regression TRAIN & VALIDATE
-        clf = LogisticRegression(random_state = 0).fit(X_train, y_train)
-        y_pred = clf.predict(X_val)
-        print(classification_report(y_val, y_pred))
-
-        ###log regression TEST
-
+        model = lgb.train(
+            params,
+            lgb_train,
+            num_boost_round=1000,
+            valid_sets=[lgb_train,lgb_valid],
+            valid_names=["train","valid"],
+            callbacks=[lgb.early_stopping(50)]
+        )
         
-        y_test_pred = clf.predict(X_test)
+        y_pred_prob=model.predict(X_test,num_iteration=model.best_iteration)
+        y_pred = y_pred_prob.argmax(axis=1)
+
+        accuracy=accuracy_score(y_test,y_pred)
+        precision = precision_score(y_test, y_pred, average='macro')
+        recall = recall_score(y_test, y_pred, average='macro')
+        f1 = f1_score(y_test, y_pred, average='macro')
+        # auc = roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
+
+        print("Accuracy:",accuracy)
+        print("Precision:",precision)
+        print("Recall:",recall)
+        print("F1 Score:",f1)
+        # print("AUC:",auc)
+
         print(f"--- Psycho test (fold {i}) ---")
-        print(classification_report(y_test, y_test_pred))
+        print(classification_report(y_test, y_pred))
+
+
+def main(df):
+    lightGBM_clf(df)
+
+if __name__ == '__main__':
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv")
+
+    args = ap.parse_args()
+    main(
+        args.csv
+    )
