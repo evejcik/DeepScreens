@@ -62,8 +62,12 @@ def csv_stack(path_to_csvs: str) -> pd.DataFrame:
     for f in files:
         filename = os.path.basename(f)
         film_name = "_".join(filename.split(" ")[2:4])
+        print(f"Film name: {film_name}")
         csv = pd.read_csv(f)
+
         csv['film'] = film_name
+        print(f"{film_name} Shape: {csv.shape}")
+
         dfs.append(csv)
     # df = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
     # filename
@@ -75,9 +79,10 @@ def reliability_int(df):
         "trust" : 0,
         "don't trust" : 2,
         "partial trust" : 1,
-        "ambiguous" : 3
+        "ambiguous" : 2 #mapping to partial trust for now, can discuss later
     }
 
+    
     # see every unique raw value coming in before mapping
     print(df['reliability_category'].unique())
 
@@ -104,7 +109,15 @@ def reliability_int(df):
     return df
 
 def clean_nans(df):
-    cols = ['geom_plausible', 'bone_length', 'geom_flag', 'bone_ratio']
+    cols = ['geom_plausible', 
+            'bone_length', 
+            'geom_flag', 
+            'bone_ratio', 
+            'reason_for_distrust', 
+            'position_velocity',
+            'position_acceleration',
+            'dist_to_boundary'
+            ]
     df[cols] = df[cols].fillna(-1)
 
     return df
@@ -195,7 +208,7 @@ def data_loader(csv_path):
     df = joint_mapping(df)
     # print(f"Type df joint_mapping: {type(df)}")
     df = is_valid(df)
-    df = clean_nans(df)
+    # df = clean_nans(df)
 
     # print(f"Type df: {type(df)}")
     print(df.columns)
@@ -330,15 +343,17 @@ def data_checking(df):
     plt.tight_layout()
     plt.savefig('correlation_matrix.png')
 
-    print(df[df['joint_name'] == 'right_hip']['joint_id'].value_counts())
-    print(df[df['joint_name'] == 'left_elbow']['joint_id'].value_counts())
-    print(df[df['joint_name'].isin([7, 12])][['joint_name', 'joint_id', 'film']].head(20))
+    # print(df[df['joint_name'] == 'right_hip']['joint_id'].value_counts())
+    # print(df[df['joint_name'] == 'left_elbow']['joint_id'].value_counts())
+    # print(df[df['joint_name'].isin([7, 12])][['joint_name', 'joint_id', 'film']].head(20))
     print(df['joint_name'].unique())
     pd.set_option('display.max_columns', None)
         
     print(df.groupby('film')['joint_name'].unique())
     pd.reset_option('display.max_columns')
     print(df.groupby(['film', 'joint_name']).size().unstack(fill_value=0))
+
+    print(f"NULL VALUES: {df.isnull().sum()[df.isnull().sum() > 0]}")
 
 
 
@@ -363,6 +378,8 @@ def main(csv,k):
                             'x_velocity',
                             'y_velocity'
                             ], errors = 'ignore')
+
+    df = clean_nans(df)
     data_checking(df)
     df.to_csv('Long Data.csv', index = False)
     print("Final Data saved.")

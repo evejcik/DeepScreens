@@ -16,6 +16,9 @@ from google.auth import default
 from google.auth.transport.requests import Request
 
 
+#####THIS FILE IS A BACKUP FOR FILMS WITHOUT NEEDING OFFSETS
+
+
 def load_json(json_path):
     p = Path(json_path)
     p_dict = {
