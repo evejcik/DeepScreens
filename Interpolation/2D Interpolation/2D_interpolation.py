@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 
 from kalman import KalmanFilter, apply_kalman_to_group, apply_kalman_filter
+from cubic_spline import apply_cubic_spline
 
 
 #need to get long data csv
@@ -35,11 +36,24 @@ def sav_golay(df, k, p):
     df['y_smooth'] = savgol_filter(y, window_length = k, polyorder = p)
     return df
 
+def kalman(df):
+    df = df[df['reliability_category_int'].isin([0,1])]
+    df = apply_kalman_filter(df)
+    return df
+
+
+def cubic_spline(df):
+    #only apply to dont trusts
+    df = df[df['reliability_category_int'] == 2]
+    df = apply_cubic_spline(df)
+    return df
+
 
 def main(csv):
     df = pd.read(csv)
     df = sav_golay(df, k = 7, p = 10) #idk, guessing at these, finetune later
-    df = apply_kalman_filter(df)
+    df = kalman(df)
+    df = cubic_spline(df)
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
