@@ -271,7 +271,7 @@ def position_velocity(df):
     return df
 
 def position_acceleration(df):
-    df['acceleration'] = df.groupby(['film', 'instance_id', 'joint_name'])['position_velocity'].transform(
+    df['position_acceleration'] = df.groupby(['film', 'instance_id', 'joint_name'])['position_velocity'].transform(
         lambda x : x.diff()
     )
 
@@ -325,6 +325,7 @@ def main(csv,k):
     df = data_loader(csv)
 
     df = confidence_mean_rolling(df, k)
+    df = confidence_std_rolling(df, k)
     df = position_mean_rolling(df, k)
     df = position_std_rolling(df,k)
     df = position_velocity(df)
