@@ -301,6 +301,43 @@ def frames_since_trust(df):
     df['frames_since_trust'] = pd.Series(results)
     return df
 
+def frames_since_dont_trust(df):
+    results = {}
+    for (film, instance_id, joint_name), group in df.groupby(['film', 'instance_id', 'joint_name']):
+        frames_since_dont_trust = -1
+        for idx, row in group.iterrows():
+            frames_since_dont_trust = 0 if row['reliability_category_int'] == 2 else frames_since_dont_trust + 1 if frames_since_dont_trust >= 0 else -1
+            results[idx] = frames_since_dont_trust
+    df['frames_since_dont_trust'] = pd.Series(results)
+    return df
+
+def window_fractions(df, k = 5):
+    df = df.sort_values(['film', 'instance_id', 'joint_name', 'frame_id'])
+    
+    # create binary indicator for each class
+    df['is_trust']       = (df['reliability_category_int'] == 0).astype(int)
+    df['is_partial']     = (df['reliability_category_int'] == 1).astype(int)
+    df['is_dont_trust']  = (df['reliability_category_int'] == 2).astype(int)
+    
+    grp = ['film', 'instance_id', 'joint_name']
+    window = 2*k + 1
+    
+    for col, out in [
+        ('is_trust',      'frac_trust_wk'),
+        ('is_partial',    'frac_partial_wk'),
+        ('is_dont_trust', 'frac_dont_trust_wk'),
+    ]:
+        df[out] = df.groupby(grp)[col].transform(
+            lambda x: x.rolling(window=window, center=True, min_periods=1).mean()
+        )
+    
+    df = df.drop(columns=['is_trust', 'is_partial', 'is_dont_trust'])
+    return df
+
+def re_labeling_rules(df):
+    df = sandwiched_partial_trust(df)
+
+
 def film_int_encoding(df):
     film_map = {film: idx for idx, film in enumerate(df['film'].unique())}
 
@@ -367,6 +404,8 @@ def main(csv,k):
     df = position_velocity(df)
     df = position_acceleration(df)
     df = frames_since_trust(df)
+    df = frames_since_dont_trust(df)
+    df = window_fractions(df)
     df = film_int_encoding(df)
 
 
