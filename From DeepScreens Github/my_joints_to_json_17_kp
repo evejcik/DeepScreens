@@ -1,0 +1,41 @@
+import json
+import numpy as np
+import pandas as pd
+from pathlib import Path
+
+
+def build_cleaned_json_per_film(original_json_path, my_df, output_path, film):
+    #Input: original MMPose JSON (with 133 kp and stacked 2D and 3D data) and my cleaned dataframe
+    #that includes the confidence scores replaced with my top class probabilites
+    #2D: x,y replaced with x_filled, y_filled, keypoint_interpolated added as a new boolean field per joint
+    #take out the 3D data (anything in meta_info_3d)
+
+    #Arguments: paths to original json (133 2D, 17 3D), 
+    # path to my cleaned df - columns = [film, instance_id, frame_id, joint_id, x_filled, y_filled, trust_probability, keypoint_interpolated]
+    # and path to output for save
+    df = pd.read_csv(my_df)
+
+    with open(original_json_path, 'r') as f:
+        data = json.load(f)
+
+        #meta_info: -> dictionary -> these values I need to delete and fill in with my own: containing keys, num_keypoints: 17, keypoint_id2name, keypoint_name2id, 
+        #do i need to cut down on the flip_indices, pairs, keypoint_colors, etc. that all contain 133 values? 
+        #num_skeleton_links = 65, skeleton_links, skeleton_links_colors, should I cut this down?
+        #dataset_keypoint_weights -> what is this?
+        #what is sigmas? is this the sigmoid smoothing function?
+        #skip everything in meta_info_3d
+        #dig into: instance_info['frame_id']['instances']['keypoints']
+        #make my own dictionary first in this format
+
+        #take in one film at a time
+        #should I group by frame, then instances?
+        for (frame_, instance) in 
+        for frame in max(frame_id):
+            frame_id = frame
+            
+        instance_info = [{}]
+
+
+
+
+

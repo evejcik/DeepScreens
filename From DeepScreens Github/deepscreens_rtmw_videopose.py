@@ -15,7 +15,7 @@ import numpy as np
 from mmengine.logging import print_log
 from scipy.ndimage import gaussian_filter
 
-from mmpose.apis import (extract_pose_sequence, inference_pose_lifter_model,
+from mmpose.apis import (extract_pose_sequence, inference_pose_lifter_model, #what is the difference from inference_pose_lifter and PoseLifter?
                          inference_topdown, init_model, _track_by_oks, _track_by_iou)
 from mmpose.models.pose_estimators import PoseLifter
 from mmpose.models.pose_estimators.topdown import TopdownPoseEstimator
@@ -32,6 +32,7 @@ except (ImportError, ModuleNotFoundError):
 
 # ========== Keypoint Conversion Functions (from Script 3) ==========
 
+#already converted! 
 def convert_rtmpose133_to_h36m17_2d(coco_keypoints):
     """Convert 133 RTMW keypoints to 17 H36M keypoints (2D version)."""
     h36m_keypoints = np.zeros((17, 2), dtype=np.float32)
@@ -81,7 +82,7 @@ def convert_rtmpose133_to_h36m17_2d(coco_keypoints):
     
     return h36m_keypoints
 
-
+#I think I already have this as well, but I think I should consider dropping in the probability scores instead of wherever this is inputted
 def remap_keypoint_scores_133_to_17(coco_scores):
     """
     Remap confidence scores from 133 keypoints to 17 H36M keypoints.
@@ -131,6 +132,7 @@ def remap_keypoint_scores_133_to_17(coco_scores):
     
     return h36m_scores.tolist()
 
+#why?
 def geometric_mean(scores: list) -> float:
     """
     Calculate geometric mean of confidence scores.
@@ -159,6 +161,7 @@ def geometric_mean(scores: list) -> float:
 
 # ========== Smoothing Functions (from Script 1) ==========
 
+#should I replace this with my own smoothing work?
 def smooth_keypoints_temporal(keypoints_array, sigma=1.0):
     """
     Apply Gaussian smoothing to keypoint trajectories over time.
@@ -210,7 +213,7 @@ def smooth_keypoints_temporal(keypoints_array, sigma=1.0):
     
     return smoothed
 
-
+#should this be by track_id or instance_id?
 def extract_keypoints_by_track_id(pred_instances_list, track_id):
     """Extract keypoints for a specific track_id across all frames."""
     keypoints_data = []
@@ -233,7 +236,7 @@ def extract_keypoints_by_track_id(pred_instances_list, track_id):
     
     return np.array(keypoints_data)
 
-
+#should I keep this given my own smoothing?
 def apply_smoothing_to_instances(pred_instances_list, sigma, is_3d=False):
     """
     Apply temporal smoothing to all tracked instances.
@@ -312,6 +315,7 @@ def apply_smoothing_to_instances(pred_instances_list, sigma, is_3d=False):
 
 # ========== Film Metadata Loading (from Script 2) ==========
 
+#is this where I would put my revamped jsons with the 2D coords rewritten?
 def load_film_metadata(input_path, film_info_path='/isi/mep-rip/working/deepscreens/python/film_data.json'):
     """Load film metadata from external JSON file."""
     filename = os.path.basename(input_path)
@@ -342,12 +346,14 @@ def load_film_metadata(input_path, film_info_path='/isi/mep-rip/working/deepscre
             level=logging.WARNING)
         return {}
 
+#what is hms?
 def seconds_to_hms(seconds):
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     s = int(seconds % 60)
     return f"{h}:{m:02d}:{s:02d}"
 
+#would this be necessary if I replace with my probabilities?
 def sigmoid_normalize_scores(scores: np.ndarray) -> np.ndarray:
     """
     Normalize SimCC confidence scores to 0-1 range using sigmoid.
@@ -379,6 +385,7 @@ def sigmoid_normalize_scores(scores: np.ndarray) -> np.ndarray:
 
 # ========== Main Processing Function ==========
 
+#takes in frame, this outputs the 2D coordinates for the 133 model right? Is this what would be the input for my program?
 def process_one_image_2d(args, detector, frame, pose_estimator,
                          pose_est_results_last, next_id,
                          visualize_frame, visualizer):
@@ -494,7 +501,7 @@ def process_one_image_2d(args, detector, frame, pose_estimator,
     
     return (pose_est_results, next_id)
 
-
+#what is the significance of this function?
 def process_one_image_3d(args, frame_idx, pose_est_results_2d_converted,
                          pose_est_results_list_converted, pose_lifter,
                          visualize_frame, visualizer):
@@ -667,7 +674,9 @@ def process_one_image_3d(args, frame_idx, pose_est_results_2d_converted,
     # Return DENORMALIZED instances for JSON output
     return pred_3d_instances
 
-
+#would this be an intermediary step for my work? Should my program before the 2D results are converted to a lifting format or after the 2D results are predicted, I run my classifier on them,
+# they get sent to the lifting format? or at another point in the pipeline? My points are already in the 17 keypoint format, should I undo this and just put the 133 points
+# into this function, then run my program on those 17, then...
 def convert_2d_results_to_lifting_format(pose_est_results_2d, pose_det_dataset_name, 
                                          pose_lift_dataset_name):
     """
@@ -760,7 +769,7 @@ def convert_2d_results_to_lifting_format(pose_est_results_2d, pose_det_dataset_n
     
     return pose_est_results_converted
 
-
+#why is this one also taking in the 133? Should I make it so that it takes in my 17 keypoint predictions and confidence scores?
 def combine_2d_3d_results(pose_est_results_2d_133kpt, pred_3d_instances, 
                           frame_idx, video_shape=None):
     """
