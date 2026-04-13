@@ -29,7 +29,12 @@ def build_cleaned_json_per_film(original_json_path, my_df, output_path, film):
 
         #take in one film at a time
         #should I group by frame, then instances?
-        for (frame_, instance) in 
+        
+        for (frame, instance), enumerate in df.groupby(['frame','instance']).apply(lambda x: x.sort_values('joint_id')):
+            
+            keypoints = []
+            instances = np.array([{"keypoints" : keypoints}], dtype = object)
+            
         for frame in max(frame_id):
             frame_id = frame
             
