@@ -12,6 +12,7 @@ from scipy.signal import savgol_filter
 
 from kalman import KalmanFilter, apply_kalman_to_group, apply_kalman_filter
 from cubic_spline import apply_cubic_spline
+from backward_pass import apply_backward_pass
 
 
 #need to get long data csv
@@ -54,6 +55,7 @@ def main(csv):
     df = sav_golay(df, k = 7, p = 10) #idk, guessing at these, finetune later
     df = kalman(df)
     df = cubic_spline(df)
+    df = apply_backward_pass(df)
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
