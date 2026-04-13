@@ -30,17 +30,36 @@ def build_cleaned_json_per_film(original_json_path, my_df, output_path, film):
         #take in one film at a time
         #should I group by frame, then instances?
         
-        for (frame, instance), enumerate in df.groupby(['frame','instance']).apply(lambda x: x.sort_values('joint_id')):
+        for (frame, instance, joint), group in df.groupby(['frame','instance']).apply(lambda x: x.sort_values('joint_id')):
+
+            x = df.loc[(df['frame_id'] == frame) & (df['instance'] == instance) & (df['joint_id'] == joint), 'x_filled']
+            y = 
+            lookup = {}
+            for idx, row in group.iterrows():
+                key = (frame, instance, joint)
+                lookup[key] = {
+                    'x' = df.loc[(df['frame_id'] == frame) & (df['instance'] == instance) & (df['joint_id'] == joint), 'x_filled']
+                    'y' = df.loc[(df['frame_id'] == frame) & (df['instance'] == instance) & (df['joint_id'] == joint), 'y_filled']
+                    'trust_prob' = 
+                }
+                # frames_since_dont_trust = 0 if row['reliability_category_int'] == 2 else frames_since_dont_trust + 1 if frames_since_dont_trust >= 0 else -1
+                # results[idx] = frames_since_dont_trust
+
+                keypoints.append(['x_filled', 'y_filled'])
             
-            keypoints = []
             instances = np.array([{"keypoints" : keypoints}], dtype = object)
-            
-        for frame in max(frame_id):
-            frame_id = frame
-            
-        instance_info = [{}]
 
+        # print(data.keys())
+        # print(type(data['instance_info']))
+        # print(data['instance_info'][0].keys())
+        # print(data['instance_info'][0]['instances'][0].keys())
+            
 
+build_cleaned_json_per_film('/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/ramona-demo-clip 1_1369/segment_1_1639.json', 
+                            '/Users/emmavejcik/Desktop/DeepScreens/Feature_Engineering/Long Data.csv',
+                            '/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/',
+                            'Ramona_1_1639'
+                            )
 
 
 

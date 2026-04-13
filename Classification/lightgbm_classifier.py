@@ -59,18 +59,22 @@ def lightGBM_clf(df, k = 3):
 
     X, y = train_data[FEATURES], train_data[TARGET]
     X_test, y_test = test_data[FEATURES], test_data[TARGET]
-    groups = train_data['film'] #putting film name not film id now just for legibility -> now groups is a series!
+    groups = train_data['film'] #putting film name not film id now just for legibility -> now groups is a series!, a n x 1 size array containing
+    #which film corresponds to which row in the data
     group_kfold = GroupKFold(n_splits = k)
     scaler = StandardScaler()
     #GroupKFold.split() needs to know which group every single row belongs to, so it can ensure all rows from the same film stay together
     # print(groups)
-    
-    for i, (train_index, val_index) in enumerate(group_kfold.split(X, y, groups)):
+    rows = []
+
+    for i, (train_index, val_index) in enumerate(group_kfold.split(X, y, groups)): #i = (0,1,2) -> how many folds there are, train_index and val index get arrays of integer positions for the train and validation data respectively
+        
         train_films = groups.iloc[train_index].unique()
         val_films = groups.iloc[val_index].unique()
         print(f"Fold {i}: train={train_films}, val={val_films}")
 
         X_train, X_val = X.iloc[train_index], X.iloc[val_index]
+        # print(f"HERE: {X.iloc[val_index].index[:5]}")#we see that the original data frame indices are maintained
         y_train, y_val = y.iloc[train_index], y.iloc[val_index]
         sample_weights = y_train.map(CLASS_WEIGHTS)
 
@@ -109,7 +113,17 @@ def lightGBM_clf(df, k = 3):
         )
         
         y_pred_prob=model.predict(X_test,num_iteration=model.best_iteration)
+        y_pred_prob_val = model.predict(X_val,num_iteration=model.best_iteration) #by getting the predictions for the validation set, 
+        #we can get the probabilities for each movie that were assigned to that movie from a model that did not see it, as opposed to just throwing them away.
         y_pred = y_pred_prob.argmax(axis=1)
+
+        for original_ind, probs in zip(X_val.index, y_pred_prob_val):
+            rows.append({
+                'original_index': original_ind,
+                'prob_trust': probs[0],
+                'prob_partial_trust': probs[1],
+                'prob_dont_trust': probs[2],
+            })
 
         accuracy=accuracy_score(y_test,y_pred)
         precision = precision_score(y_test, y_pred, average='macro')
@@ -125,6 +139,49 @@ def lightGBM_clf(df, k = 3):
 
         print(f"--- Psycho test (fold {i}) ---")
         print(classification_report(y_test, y_pred))
+
+
+    #final model - get predictions for Psycho from on a model trained on all three training films
+    sample_weights = y.map(CLASS_WEIGHTS) #looking at the full dataset, not just per fold now
+    lgb_train_full = lgb.Dataset(X, label = y, weight = sample_weights)
+    model = lgb.train(
+            params,
+            lgb_train_full,
+            num_boost_round=1000
+        )
+    
+    psycho_y_pred_prob = model.predict(X_test, num_iteration = model.best_iteration)
+    
+    psycho_y_pred = psycho_y_pred_prob.argmax(axis = 1)
+    for original_ind, probs in zip(X_test.index, psycho_y_pred_prob): #predicting Psycho's X values
+        rows.append({
+                'original_index': original_ind,
+                'prob_trust': probs[0],
+                'prob_partial_trust': probs[1],
+                'prob_dont_trust': probs[2],
+            })
+
+    probs_df = pd.DataFrame(rows)
+    data = data.merge(probs_df, left_index=True, right_on='original_index', how='left')
+
+    accuracy=accuracy_score(y_test,psycho_y_pred)
+    precision = precision_score(y_test, psycho_y_pred, average='macro')
+    recall = recall_score(y_test, psycho_y_pred, average='macro')
+    f1 = f1_score(y_test, psycho_y_pred, average='macro')
+    # auc = roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
+
+    print("Accuracy:",accuracy)
+    print("Precision:",precision)
+    print("Recall:",recall)
+    print("F1 Score:",f1)
+    # print("AUC:",auc)
+
+    print(f"--- Psycho test No Folding---")
+    print(classification_report(y_test, psycho_y_pred))
+
+    print(data['prob_trust'].isna().sum())
+    print(data[data['film'] == 'Psycho_319_1411']['prob_trust'].isna().sum())
+
 
 
 def main(df):

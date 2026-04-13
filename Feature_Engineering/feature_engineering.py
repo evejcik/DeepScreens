@@ -337,7 +337,6 @@ def window_fractions(df, k = 5):
 def re_labeling_rules(df):
     df = sandwiched_partial_trust(df)
 
-
 def film_int_encoding(df):
     film_map = {film: idx for idx, film in enumerate(df['film'].unique())}
 
@@ -391,8 +390,6 @@ def data_checking(df):
     print(df.groupby(['film', 'joint_name']).size().unstack(fill_value=0))
 
     print(f"NULL VALUES: {df.isnull().sum()[df.isnull().sum() > 0]}")
-
-
 
 def main(csv,k):
     df = data_loader(csv)
