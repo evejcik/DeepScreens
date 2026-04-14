@@ -78,8 +78,8 @@ def reliability_int(df):
     trust_map = {
         "trust" : 0,
         "don't trust" : 2,
-        "partial trust" : 1,
-        "ambiguous" : 2 #mapping to partial trust for now, can discuss later
+        "partial trust" : 2, #also mapping to dont trust for now
+        "ambiguous" : 2 #mapping to dont trust for now, can discuss later
     }
 
     
