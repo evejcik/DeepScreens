@@ -21,23 +21,25 @@ print(df['joint_id'].head(5).tolist())
 #     df = pd.read_csv(my_df)
 
     with open(original_json_path, 'r') as f:
+
+        #subtract one from json 
+
+        #meta_info: -> dictionary -> these values I need to delete and fill in with my own: containing keys, num_keypoints: 17, keypoint_id2name, keypoint_name2id, 
+        #do i need to cut down on the flip_indices, pairs, keypoint_colors, etc. that all contain 133 values? 
+        #num_skeleton_links = 65, skeleton_links, skeleton_links_colors, should I cut this down?
+        #dataset_keypoint_weights -> what is this?
+        #what is sigmas? is this the sigmoid smoothing function?
+        #skip everything in meta_info_3d
+        #dig into: instance_info['frame_id']['instances']['keypoints']
+        #make my own dictionary first in this format
+
+        #take in one film at a time
+        #should I group by frame, then instances?
         data = json.load(f)
-
-#         #meta_info: -> dictionary -> these values I need to delete and fill in with my own: containing keys, num_keypoints: 17, keypoint_id2name, keypoint_name2id, 
-#         #do i need to cut down on the flip_indices, pairs, keypoint_colors, etc. that all contain 133 values? 
-#         #num_skeleton_links = 65, skeleton_links, skeleton_links_colors, should I cut this down?
-#         #dataset_keypoint_weights -> what is this?
-#         #what is sigmas? is this the sigmoid smoothing function?
-#         #skip everything in meta_info_3d
-#         #dig into: instance_info['frame_id']['instances']['keypoints']
-#         #make my own dictionary first in this format
-
-#         #take in one film at a time
-#         #should I group by frame, then instances?
         lookup = {}
         for ind, row in df.iterrows():
             
-            key = (row['frame'], row['instance'], row['joint'])
+            key = (row['frame_id'], row['instance_id'], row['joint_id'])
             lookup[key] = {
                 'x' : row['x'],
                 'y' : row['y'],
@@ -45,6 +47,25 @@ print(df['joint_id'].head(5).tolist())
                 'interpolated' : False
             }
         
+        for frame in data['instance_info']:
+            frame_id = int(frame['frame_id']) - 1
+            frame_map = {}
+            for instance_id, instance in enumerate(frame.get('instances',[])):
+                joints = {}
+                instance['keypoint_interpolated'] = [False] * len(instance['keypoints'])
+                for joint_id, (x,y) in enumerate(instance.get('keypoints', [])):
+                    key = (frame_id, instance_id, joint_id)
+                    if key in lookup:
+                        entry = lookup[key]
+                        instance['keypoints'][joint_id] = [entry['x'], entry['y']]
+                        instance['keypoint_scores'] = entry['trust_prob']
+                        
+                        instance['keypoint_interpolated'][joint_id] = entry['interpolated']
+                    else:
+                        print("Error! Key values not valid.")
+                        continue
+
+
 #         for (frame, instance, joint), group in df.groupby(['frame','instance']).apply(lambda x: x.sort_values('joint_id')):
 
 #             # x = df.loc[(df['frame_id'] == frame) & (df['instance'] == instance) & (df['joint_id'] == joint), 'x_filled']
