@@ -30,7 +30,7 @@ except (ImportError, ModuleNotFoundError):
     has_mmdet = False
 
 
-############# MY FUNCTIONS #################################
+############# MY FUNCTIONS START #################################
 def load_cleaned_json_as_2d_input(cleaned_json_path: str) -> tuple[list, list, int, int]:
     """
     Read a cleaned JSON (17 kp, trust probs, keypoint_interpolated) and
@@ -102,6 +102,62 @@ def load_cleaned_json_as_2d_input(cleaned_json_path: str) -> tuple[list, list, i
         })
 
     return pred_instances_list_2d, video_shape, fps
+
+def convert_cleaned_to_lifting_format(frame_instances: list) -> list:
+    """
+    Convert 17-keypoint instances from cleaned JSON into PoseDataSample
+    objects ready for inference_pose_lifter_model.  Replaces
+    convert_2d_results_to_lifting_format() when --cleaned-json is used.
+
+    Args:
+        frame_instances: list of instance dicts from pred_instances_list_2d,
+                         each with keys: keypoints (17,2), keypoint_scores (17,),
+                         keypoint_interpolated (17,), bbox, bbox_score, track_id
+
+    Returns:
+        List of PoseDataSample with pred_instances.keypoints shape (1, 17, 2)
+    """
+    from mmengine.structures import InstanceData
+
+    results = []
+    for inst in frame_instances:
+        kp = np.array(inst['keypoints'], dtype=np.float32)       # (17, 2)
+        sc = np.array(inst['keypoint_scores'], dtype=np.float32) # (17,)
+
+        # Validate — fail loudly rather than silently corrupt the lifter
+        if kp.shape != (17, 2):
+            raise ValueError(
+                f'convert_cleaned_to_lifting_format: expected keypoints (17,2), '
+                f'got {kp.shape}. Check load_cleaned_json_as_2d_input output.')
+        if sc.shape != (17,):
+            raise ValueError(
+                f'convert_cleaned_to_lifting_format: expected scores (17,), '
+                f'got {sc.shape}.')
+
+        sample = PoseDataSample()
+        pred_instances = InstanceData()
+        pred_instances.keypoints       = kp[np.newaxis, ...]   # (1, 17, 2)
+        pred_instances.keypoint_scores = sc[np.newaxis, ...]   # (1, 17)
+
+        bbox = inst.get('bbox', [])
+        bbox_score = inst.get('bbox_score', [])
+        if bbox:
+            pred_instances.bboxes = np.array(bbox, dtype=np.float32).reshape(1, -1)
+        if bbox_score:
+            score_val = bbox_score if not isinstance(bbox_score, list) else bbox_score[0]
+            pred_instances.bbox_scores = np.array([score_val], dtype=np.float32)
+
+        sample.pred_instances = pred_instances
+        sample.set_field(InstanceData(), 'gt_instances')
+        sample.set_field(inst.get('track_id', -1), 'track_id')
+        results.append(sample)
+
+    return results
+
+
+############# MY FUNCTIONS END #################################
+
+
 
 
 # ========== Keypoint Conversion Functions (from Script 3) ==========
@@ -918,16 +974,16 @@ def combine_2d_3d_results(pose_est_results_2d_133kpt, pred_3d_instances,
         else:
             kpts_flat = np.array([], dtype=np.float32)
 
-        # Ensure we have exactly 133 scores
-        if scores_flat.shape[0] == 133:
+        if scores_flat.shape[0] == 133: # Ensure we have exactly 133 scores
             scores_3d_17 = remap_keypoint_scores_133_to_17(scores_flat)
+        elif scores_flat.shape[0] == 17:
+            scores_3d_17 = scores_flat.tolist()
         else:
             print_log(
-                f'Warning: scores_2d_133 has {scores_flat.shape[0]} elements, expected 133 (frame {frame_idx}, instance {i})',
+                f'Warning: unexpected score count {scores_flat.shape[0]} '
+                f'(frame {frame_idx}, instance {i})',
                 logger='current',
                 level=logging.WARNING)
-
-            # Fallback: use default low confidence if 2D scores unavailable
             scores_3d_17 = [0.1] * 17
 
         # Determine if bbox is at edge of frame
@@ -1227,6 +1283,13 @@ def parse_args():
         default='',
         help='Name of the file from which this segment was drawn')
 
+    parser.add_argument(
+        '--cleaned-json',
+        type=str,
+        default='',
+        help='Path to pre-cleaned JSON with 17 kp 2D coords and trust probs. '
+            'When provided, skips MMPose Pass 1 entirely.')
+
     args = parser.parse_args()
     return args
 
@@ -1239,6 +1302,7 @@ Coordinate System Notes:
   - 2D (x,y): Pixel coordinates
   - 3D (x,y,z): Pixel units (z is depth in pixel-equivalent units)
 """
+
 def main():
     assert has_mmdet, 'Please install mmdet.'
 
@@ -1265,11 +1329,6 @@ def main():
     assert isinstance(pose_estimator, TopdownPoseEstimator), \
         'Only "TopDown" model is supported for the 1st stage (2D pose detection)'
 
-    # Get visualization parameters from 2D pose estimator
-    # det_kpt_color = pose_estimator.dataset_meta.get('keypoint_colors', None)
-    # det_dataset_skeleton = pose_estimator.dataset_meta.get('skeleton_links', None)
-    # det_dataset_link_color = pose_estimator.dataset_meta.get('skeleton_link_colors', None)
-
     # Initialize 3D pose lifter (VideoPose3D)
     pose_lifter = init_model(
         args.pose_lifter_config,
@@ -1279,17 +1338,8 @@ def main():
     assert isinstance(pose_lifter, PoseLifter), \
         'Only "PoseLifter" model is supported for the 2nd stage (2D-to-3D lifting)'
 
-    # Configure visualizer
-    # pose_lifter.cfg.visualizer.radius = args.radius
-    # pose_lifter.cfg.visualizer.line_width = args.thickness
-    # pose_lifter.cfg.visualizer.det_kpt_color = det_kpt_color
-    # pose_lifter.cfg.visualizer.det_dataset_skeleton = det_dataset_skeleton
-    # pose_lifter.cfg.visualizer.det_dataset_link_color = det_dataset_link_color
-    # visualizer = VISUALIZERS.build(pose_lifter.cfg.visualizer)
-    # visualizer.set_dataset_meta(pose_lifter.dataset_meta)
     pose_lifter.cfg.visualizer.radius = args.radius
     pose_lifter.cfg.visualizer.line_width = args.thickness
-    # Let the visualizer use the default H36M 17-keypoint configuration
     visualizer = VISUALIZERS.build(pose_lifter.cfg.visualizer)
     visualizer.set_dataset_meta(pose_lifter.dataset_meta)
 
@@ -1324,79 +1374,91 @@ def main():
 
     # Process based on input type
     if input_type == 'image':
-        # Single image processing (simplified, not implementing full 2-pass for single image)
         print_log('Single image mode not fully supported in two-pass mode. Use video mode.',
                   logger='current', level=logging.WARNING)
         return
 
     elif input_type in ['webcam', 'video']:
-        # ========== FIRST PASS: 2D Pose Detection ==========
-        print_log('Starting first pass: 2D pose detection with RTMW (133 keypoints)',
-                  logger='current', level=logging.INFO)
-        
-        if args.input == 'webcam':
-            video = cv2.VideoCapture(0)
+
+        # ========== FIRST PASS: conditional on --cleaned-json ==========
+        if args.cleaned_json:
+            print_log(
+                f'--cleaned-json provided. Skipping MMPose Pass 1. '
+                f'Loading from {args.cleaned_json}',
+                logger='current', level=logging.INFO)
+
+            pred_instances_list_2d, video_shape, fps = load_cleaned_json_as_2d_input(
+                args.cleaned_json)
+
+            print_log(f'Loaded {len(pred_instances_list_2d)} frames from cleaned JSON.',
+                      logger='current', level=logging.INFO)
+
         else:
-            video = cv2.VideoCapture(args.input)
+            # ========== FIRST PASS: 2D Pose Detection ==========
+            print_log('Starting first pass: 2D pose detection with RTMW (133 keypoints)',
+                      logger='current', level=logging.INFO)
 
-        (major_ver, minor_ver, subminor_ver) = (cv2.__version__).split('.')
-        if int(major_ver) < 3:
-            fps = video.get(cv2.cv.CV_CAP_PROP_FPS)
-        else:
-            fps = video.get(cv2.CAP_PROP_FPS)
+            if args.input == 'webcam':
+                video = cv2.VideoCapture(0)
+            else:
+                video = cv2.VideoCapture(args.input)
 
-        frame_idx = 0
-        next_id = 0
-        pose_est_results_last = []
-        # pose_est_results_list_2d = []
-        pred_instances_list_2d = []
-        video_shape = []
+            (major_ver, minor_ver, subminor_ver) = (cv2.__version__).split('.')
+            if int(major_ver) < 3:
+                fps = video.get(cv2.cv.CV_CAP_PROP_FPS)
+            else:
+                fps = video.get(cv2.CAP_PROP_FPS)
 
-        while video.isOpened():
-            success, frame = video.read()
-            frame_idx += 1
-            
-            if frame_idx == 1:
-                video_shape = [frame.shape[1], frame.shape[0]]
+            frame_idx = 0
+            next_id = 0
+            pose_est_results_last = []
+            pred_instances_list_2d = []
+            video_shape = []
 
-            if not success:
-                break
+            while video.isOpened():
+                success, frame = video.read()
+                frame_idx += 1
 
-            # 2D pose detection
-            (pose_est_results_2d, next_id) = \
-                process_one_image_2d(
-                    args=args,
-                    detector=detector,
-                    frame=frame,
-                    # frame_idx=frame_idx,
-                    pose_estimator=pose_estimator,
-                    pose_est_results_last=pose_est_results_last,
-                    next_id=next_id,
-                    visualize_frame=None,  # No visualization in first pass
-                    visualizer=None)
+                if frame_idx == 1:
+                    video_shape = [frame.shape[1], frame.shape[0]]
 
-            pose_est_results_last = pose_est_results_2d
+                if not success:
+                    break
 
-            # Store results for this frame
-            frame_instances = []
-            for pose_est_result in pose_est_results_2d:  
-                pred_instances = pose_est_result.pred_instances.cpu().numpy()
-                frame_instances.append({
-                    'keypoints': pred_instances.keypoints.tolist(),
-                    'keypoint_scores': pred_instances.keypoint_scores.tolist(),
-                    'bbox': pred_instances.bboxes.tolist() if 'bboxes' in pred_instances else [],
-                    'bbox_score': pred_instances.bbox_scores.tolist() if 'bbox_scores' in pred_instances else [],
-                    'track_id': pose_est_result.get('track_id', -1)
+                # 2D pose detection
+                (pose_est_results_2d, next_id) = \
+                    process_one_image_2d(
+                        args=args,
+                        detector=detector,
+                        frame=frame,
+                        pose_estimator=pose_estimator,
+                        pose_est_results_last=pose_est_results_last,
+                        next_id=next_id,
+                        visualize_frame=None,
+                        visualizer=None)
+
+                pose_est_results_last = pose_est_results_2d
+
+                # Store results for this frame
+                frame_instances = []
+                for pose_est_result in pose_est_results_2d:
+                    pred_instances = pose_est_result.pred_instances.cpu().numpy()
+                    frame_instances.append({
+                        'keypoints': pred_instances.keypoints.tolist(),
+                        'keypoint_scores': pred_instances.keypoint_scores.tolist(),
+                        'bbox': pred_instances.bboxes.tolist() if 'bboxes' in pred_instances else [],
+                        'bbox_score': pred_instances.bbox_scores.tolist() if 'bbox_scores' in pred_instances else [],
+                        'track_id': pose_est_result.get('track_id', -1)
+                    })
+
+                pred_instances_list_2d.append({
+                    'frame_id': frame_idx,
+                    'instances': frame_instances
                 })
 
-            pred_instances_list_2d.append({
-                'frame_id': frame_idx,
-                'instances': frame_instances
-            })
-
-        video.release()
-        print_log(f'First pass complete. Processed {frame_idx} frames.',
-                  logger='current', level=logging.INFO)
+            video.release()
+            print_log(f'First pass complete. Processed {frame_idx} frames.',
+                      logger='current', level=logging.INFO)
 
         # ========== SMOOTHING 2D (Optional) ==========
         if args.smooth_2d > 0:
@@ -1409,17 +1471,18 @@ def main():
         if len(pred_instances_list_2d) > 0 and len(pred_instances_list_2d[0]['instances']) > 0:
             first_instance = pred_instances_list_2d[0]['instances'][0]
             scores = first_instance['keypoint_scores']
+            expected_len = 17 if args.cleaned_json else 133
             print(f"\n{'='*60}")
             print(f"VALIDATION: 2D Scores After Storage")
             print(f"{'='*60}")
             print(f"  Type: {type(scores)}")
             print(f"  Length: {len(scores)}")
-            print(f"  Expected length: 133")
-            print(f"  Is flat list: {len(scores) == 133 and not isinstance(scores[0], list)}")
+            print(f"  Expected length: {expected_len}")
+            print(f"  Is flat list: {len(scores) == expected_len and not isinstance(scores[0], list)}")
             if len(scores) > 0:
                 scores_array = np.array(scores)
                 print(f"  Array shape: {scores_array.shape}")
-                print(f"  Expected shape: (133,)")
+                print(f"  Expected shape: ({expected_len},)")
                 print(f"  Score range: [{np.min(scores_array):.4f}, {np.max(scores_array):.4f}]")
                 print(f"  Score mean: {np.mean(scores_array):.4f}")
                 print(f"  Score std: {np.std(scores_array):.4f}")
@@ -1451,18 +1514,22 @@ def main():
             if not success:
                 break
 
-            # Get 2D results for this frame (133 keypoints)
+            # Get 2D results for this frame
             if frame_idx <= len(pred_instances_list_2d):
                 frame_2d_data = pred_instances_list_2d[frame_idx - 1]
                 pose_est_results_2d_133kpt = frame_2d_data['instances']
             else:
                 pose_est_results_2d_133kpt = []
 
-            # Convert 133 keypoints to 17 keypoints
-            pose_est_results_2d_converted = convert_2d_results_to_lifting_format(
-                pose_est_results_2d_133kpt,
-                pose_det_dataset_name,
-                pose_lift_dataset_name)
+            # Convert 2D keypoints to lifting format
+            if args.cleaned_json:
+                pose_est_results_2d_converted = convert_cleaned_to_lifting_format(
+                    pose_est_results_2d_133kpt)
+            else:
+                pose_est_results_2d_converted = convert_2d_results_to_lifting_format(
+                    pose_est_results_2d_133kpt,
+                    pose_det_dataset_name,
+                    pose_lift_dataset_name)
 
             # Accumulate converted results for sequence processing
             pose_est_results_list_converted.append(pose_est_results_2d_converted)
@@ -1477,7 +1544,7 @@ def main():
                 visualize_frame=mmcv.bgr2rgb(frame),
                 visualizer=visualizer if save_video or args.show else None)
 
-            # Combine 2D (133 kpt) and 3D (17 kpt) results
+            # Combine 2D and 3D results
             combined_frame = combine_2d_3d_results(
                 pose_est_results_2d_133kpt,
                 pred_3d_instances,
@@ -1517,13 +1584,11 @@ def main():
 
         # ========== SAVE PREDICTIONS ==========
         if save_predictions:
-            # Load film metadata
             film_metadata = load_film_metadata(args.source_file_name, args.meta_info_root)
 
             start_sec = args.segment_start_frame / fps
             end_sec = args.segment_end_frame / fps
 
-            # Create video_info
             video_info_dict = dict(
                 video_shape=video_shape,
                 frame_rate=fps,
@@ -1531,7 +1596,6 @@ def main():
                 end_time=seconds_to_hms(end_sec)
             )
 
-            # Add film metadata if available
             if film_metadata:
                 video_info_dict.update(film_metadata)
                 print_log(
@@ -1541,9 +1605,8 @@ def main():
 
             video_info = [video_info_dict]
 
-
             # Clean up meta_info numpy arrays
-            meta_info_json_3d=pose_lifter.dataset_meta.copy()
+            meta_info_json_3d = pose_lifter.dataset_meta.copy()
             for key, value in meta_info_json_3d.items():
                 if isinstance(value, np.ndarray):
                     meta_info_json_3d[key] = value.tolist()
@@ -1551,22 +1614,13 @@ def main():
             meta_info_json_3d["stats_info"]["bbox_center"] = meta_info_json_3d["stats_info"]["bbox_center"].tolist()
             meta_info_json_3d["stats_info"]["bbox_scale"] = meta_info_json_3d["stats_info"]["bbox_scale"].tolist()
 
-            # Round float values
-            instance_info_json = truncate_floats(pred_instances_list_final)
-
-            # Clean up meta_info numpy arrays
-            meta_info_json_2d=pose_estimator.dataset_meta.copy()
+            meta_info_json_2d = pose_estimator.dataset_meta.copy()
             for key, value in meta_info_json_2d.items():
                 if isinstance(value, np.ndarray):
                     meta_info_json_2d[key] = value.tolist()
 
-            # meta_info_json_2d["stats_info"]["bbox_center"] = meta_info_json_2d["stats_info"]["bbox_center"].tolist()
-            # meta_info_json_2d["stats_info"]["bbox_scale"] = meta_info_json_2d["stats_info"]["bbox_scale"].tolist()
-
-            # Round float values
             instance_info_json = truncate_floats(pred_instances_list_final)
 
-            # Save to JSON
             with open(args.pred_save_path, 'w') as f:
                 json.dump(
                     dict(
@@ -1578,16 +1632,15 @@ def main():
                     indent='\t')
             print_log(f'Predictions saved at {args.pred_save_path}',
                       logger='current', level=logging.INFO)
-            
-            # Save video_info separately to film_metadata.json
+
             film_metadata_path = os.path.join(
                 args.output_root,
                 f'metadata_{os.path.splitext(os.path.basename(args.input))[0]}.json')
-            
+
             with open(film_metadata_path, 'w') as f:
                 json.dump(video_info, f, indent='\t')
             print_log(f'Film metadata saved at {film_metadata_path}',
-                    logger='current', level=logging.INFO)
+                      logger='current', level=logging.INFO)
 
         if save_video:
             print_log(f'Video saved at {output_file}',
@@ -1595,6 +1648,7 @@ def main():
 
     else:
         raise ValueError(f'file {os.path.basename(args.input)} has invalid format.')
+
 
 
 if __name__ == '__main__':
