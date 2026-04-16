@@ -30,6 +30,80 @@ except (ImportError, ModuleNotFoundError):
     has_mmdet = False
 
 
+############# MY FUNCTIONS #################################
+def load_cleaned_json_as_2d_input(cleaned_json_path: str) -> tuple[list, list, int, int]:
+    """
+    Read a cleaned JSON (17 kp, trust probs, keypoint_interpolated) and
+    produce pred_instances_list_2d in the exact format Pass 1 outputs,
+    plus video metadata needed by main().
+
+    Returns:
+        pred_instances_list_2d : list of dicts, one per frame:
+            {
+              'frame_id': int,          # 1-indexed, matching original
+              'instances': [
+                {
+                  'keypoints':       [[x,y], ...],  # 17 pairs, pixel space
+                  'keypoint_scores': [float, ...],  # 17 trust probs
+                  'keypoint_interpolated': [bool, ...],  # 17 flags
+                  'bbox':       [x1,y1,x2,y2],
+                  'bbox_score': float | [],
+                  'track_id':   int,
+                }, ...
+              ]
+            }
+        video_shape : [width, height]
+        fps         : float
+    """
+    with open(cleaned_json_path, 'r') as f:
+        data = json.load(f)
+
+    # Pull video metadata from the JSON itself
+    video_info = data.get('video_info', [{}])[0]
+    video_shape = video_info.get('video_shape', [0, 0])  # [width, height]
+    fps = float(video_info.get('frame_rate', 25.0))
+
+    pred_instances_list_2d = []
+
+    for frame in data['instance_info']:
+        frame_id = int(frame['frame_id'])   # keep 1-indexed — matches Pass 2 loop
+        instances_out = []
+
+        for instance in frame.get('instances', []):
+            # keypoints already (17, 2) flat list in JSON
+            kp = instance.get('keypoints', [])
+            scores = instance.get('keypoint_scores', [])
+            interp = instance.get('keypoint_interpolated', [False] * len(kp))
+            bbox = instance.get('bbox', [])
+            bbox_score = instance.get('bbox_score', [])
+            track_id = instance.get('track_id', -1)
+
+            # Defensive: flatten bbox if nested e.g. [[x1,y1,x2,y2]]
+            if bbox and isinstance(bbox[0], (list, np.ndarray)):
+                bbox = list(np.array(bbox, dtype=np.float32).flatten())
+
+            # bbox_score: Pass 1 stores this as a list; normalise to scalar for
+            # consistency with how combine_2d_3d_results uses it
+            if isinstance(bbox_score, list) and len(bbox_score) == 1:
+                bbox_score = bbox_score[0]
+
+            instances_out.append({
+                'keypoints':            kp,
+                'keypoint_scores':      scores,
+                'keypoint_interpolated': interp,
+                'bbox':                 bbox,
+                'bbox_score':           bbox_score,
+                'track_id':             track_id,
+            })
+
+        pred_instances_list_2d.append({
+            'frame_id':  frame_id,
+            'instances': instances_out,
+        })
+
+    return pred_instances_list_2d, video_shape, fps
+
+
 # ========== Keypoint Conversion Functions (from Script 3) ==========
 
 #already converted! 
