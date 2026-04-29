@@ -23,12 +23,12 @@ FEATURES = [
     'bone_ratio',
     'bone_length',
     'geom_plausible',
-    'confidence_std_wk',
+    'confidence_std_wk'
     # 'position_velocity',
     # 'position_acceleration',
     # 'position_std_x_wk',
     # 'position_std_y_wk',
-    # 'frames_since_trust',
+    # 'frames_since_trust', #we discovered that these features were not actually that useful I believe
 ]
 
 TARGET = 'reliability_category_int'
@@ -50,6 +50,18 @@ CLASS_WEIGHTS = {0: 1.0, 1: 2.0}
 # CLASS_WEIGHTS = {'Moonlight_1_1529': 1.0, 'Ramona_1_1639': 4.0, 'Tron_2059_2148' : 2.0} #for legibility
 
 # ── 1. Prepare data ───────────────────────────────────────────────────────────
+
+def run_inference(model, features_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Run trained model on new unannotated data.
+    Returns features_df with prob_unreliable column added.
+    """
+    valid_mask = features_df[FEATURES].notna().all(axis=1)
+    X = features_df.loc[valid_mask, FEATURES].replace(-1, np.nan).fillna(-1)
+    probs = model.predict(X)
+    features_df.loc[valid_mask, 'prob_unreliable'] = probs
+    features_df.loc[~valid_mask, 'prob_unreliable'] = np.nan
+    return features_df
 
 def lightGBM_clf(df, k = 3):
     #k is number of unique films we're passing in here
@@ -131,7 +143,7 @@ def lightGBM_clf(df, k = 3):
         for original_ind, probs in zip(X_val.index, y_pred_prob_val):
             rows.append({
                 'original_index': original_ind,
-                'prob_trust': probs
+                'prob_unreliable': probs
             })
 
         accuracy=accuracy_score(y_test,y_pred)
@@ -170,7 +182,7 @@ def lightGBM_clf(df, k = 3):
     for original_ind, probs in zip(X_test.index, psycho_y_pred_prob): #predicting Psycho's X values
         rows.append({
                 'original_index': original_ind,
-                'prob_trust': probs
+                'prob_unreliable': probs
             })
 
     probs_df = pd.DataFrame(rows)
@@ -197,14 +209,21 @@ def lightGBM_clf(df, k = 3):
     data.to_csv('../Feature_Engineering/Long_Data_with_probs.csv', index=False)
     print("Saved.")
 
+    import joblib
+
+    joblib.dump(model, 'lgbm_reliability_model.pkl')
+    print("Model saved to lgbm_reliability_model.pkl")
+
 
 
 def main(df):
     lightGBM_clf(df)
 
+    
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument("--csv")
+    ap.add_argument("--csv") ##default is Feature_Engineering/Long Data.csv
 
     args = ap.parse_args()
     main(

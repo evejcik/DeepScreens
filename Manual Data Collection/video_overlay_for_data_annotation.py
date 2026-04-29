@@ -1,74 +1,109 @@
-import cv2
-import os
-from pathlib import Path
-import json
-import numpy as np
+"""
+visualise_skeleton.py
+─────────────────────
+Skeleton overlay of cleaned 17-keypoint JSON on film footage.
+Letterbox detection and coordinate transform ported directly from
+visualiser_no_offsets.py.
+
+Usage
+-----
+python visualise_skeleton.py \
+    --json          path/to/cleaned.json \
+    --mp4           path/to/display_video.mp4 \
+    [--segment_mp4  path/to/letterboxed_segment.mp4] \
+    [--start 0] [--end 999] \
+    [--output_path  out.mp4] \
+    [--trust_threshold 0.7] \
+    [--use_segment_offsets]   # hardcoded Tron geometry
+
+--mp4            The video frames are read from here and drawn on.
+--segment_mp4    Used ONLY for letterbox detection (first-frame scan).
+                 If omitted, --mp4 is used for detection too.
+--use_segment_offsets
+                 Skip auto-detection; apply hardcoded Tron geometry:
+                 content_w=650, content_h=359, offset_x=10.
+
+Keyboard controls:
+    s  : next frame
+    a  : previous frame
+    d  : skip forward 10 frames
+    q  : quit
+
+Joint colouring
+    green  : keypoint_interpolated=False AND score >= trust_threshold
+    yellow : keypoint_interpolated=False AND score <  trust_threshold
+    red    : keypoint_interpolated=True  (regardless of score)
+"""
+
 import argparse
-import pandas as pd
-import re
-import gspread
-from google.oauth2.service_account import Credentials
+import json
+import sys
+from pathlib import Path
 
-from geometric_plausibility import add_geometric_plausibility, compute_boundary_distance
+import cv2
+import numpy as np
 
+# ─────────────────────────────────────────────────────────────────────────────
+# H36M 17-joint skeleton
+# ─────────────────────────────────────────────────────────────────────────────
+BONE_PAIRS = [
+    (1, 2), (2, 3),      # right leg
+    (4, 5), (5, 6),      # left leg
+    (7, 8),              # spine -> thorax
+    (8, 10),             # thorax -> head
+    (11, 12), (12, 13),  # left arm
+    (14, 15), (15, 16),  # right arm
+    (0, 1), (0, 4),      # root -> hips
+    (8, 11), (8, 14),    # thorax -> shoulders
+    (8, 9),              # thorax -> neck_base
+]
 
-def load_json(json_path):
-    p = Path(json_path)
-    p_dict = {
-        'file_name': p.name,
-        'parent_dir': p.parent.name,
-        'full_path': p.parent
-    }
-    with open(p, 'r') as j_file:
-        return json.load(j_file), p_dict
+GREEN  = (50, 220, 50)
+YELLOW = (30, 220, 220)
+RED    = (50, 50, 230)
 
+BONE_COLOUR    = (200, 200, 200)
+JOINT_RADIUS   = 5
+BONE_THICKNESS = 2
+FONT           = cv2.FONT_HERSHEY_SIMPLEX
 
-def frame_to_instances_map(data):
-    frame_map = {}
-    for frame in data['instance_info']:
-        frame_id = int(frame['frame_id']) - 1
-        frame_map[frame_id] = frame.get('instances', [])
-    return frame_map
-
-
-def frame_to_joints_map(data):
-    joint_map = {}
-    for frame in data['instance_info']:
-        frame_id = int(frame['frame_id']) - 1
-        frame_map = {}
-        for instance_id, instance in enumerate(frame.get('instances', [])):
-            joints = {}
-            for joint_id, (x, y) in enumerate(instance.get('keypoints', [])):
-                joints[joint_id] = {'x': x, 'y': y}
-            frame_map[instance_id] = joints
-        joint_map[frame_id] = frame_map
-    return joint_map
+# Hardcoded Tron segment geometry (--use_segment_offsets)
+TRON_CONTENT_W = 650
+TRON_CONTENT_H = 359
+TRON_OFFSET_X  = 10
 
 
-def clamp_int(v, lo, hi):
-    return int(max(lo, min(hi, v)))
+# ─────────────────────────────────────────────────────────────────────────────
+# JSON helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def load_json(path: str) -> dict:
+    with open(path, "r") as fh:
+        return json.load(fh)
 
 
-def color_for_inst(idx):
-    if idx == 0:
-        return (0, 0, 255)
-    elif idx == 1:
-        return (0, 230, 255)
-    else:
-        b = min((97 * idx + 29) % 256 * 1.5, 255)
-        g = min((17 * idx + 91) % 256 * 1.5, 255)
-        r = min((37 * idx + 53) % 256 * 1.5, 255)
-        return (int(b), int(g), int(r))
+def build_frame_map(data: dict) -> dict:
+    """
+    Returns {frame_id_0indexed: [instance_dict, ...]}
+    JSON frame_id is 1-indexed; we subtract 1 here to match cap frame index,
+    consistent with visualiser_no_offsets.py.
+    """
+    fmap = {}
+    for entry in data.get("instance_info", []):
+        fid = int(entry["frame_id"]) - 1
+        fmap[fid] = entry.get("instances", [])
+    return fmap
 
 
-def detect_content_region(seg_path):
+# ─────────────────────────────────────────────────────────────────────────────
+# Letterbox detection — ported verbatim from visualiser_no_offsets.py
+# ─────────────────────────────────────────────────────────────────────────────
+
+def detect_content_region(seg_path: str):
     """
     Read the first frame of seg_path and detect white letterbox/pillarbox bars.
-    Returns (content_w, content_h, offset_x, offset_y) in the display video's
-    pixel space, where offset_x/y is where the content's top-left corner lands.
-
-    White is defined as all channels > 200. If no bars are found, returns the
-    full segment dimensions with zero offsets (identity transform).
+    Returns (content_w, content_h, offset_x, offset_y).
+    White is defined as all channels > 200.
     """
     cap = cv2.VideoCapture(seg_path)
     ret, frame = cap.read()
@@ -79,7 +114,6 @@ def detect_content_region(seg_path):
     if not ret:
         raise RuntimeError(f"Cannot read first frame of segment: {seg_path}")
 
-    # Scan for white bars on each edge
     top = 0
     for i in range(seg_h):
         if not np.all(frame[i] > 200):
@@ -116,16 +150,16 @@ def detect_content_region(seg_path):
 
 def make_transform(content_w, content_h, full_w, full_h,
                    content_left=0, content_top=0,
-                   offset_x=0, offset_y=0):
+                   offset_x=0, offset_y=0) -> dict:
     scale_x = full_w / content_w
     scale_y = full_h / content_h
     t = {
-        'scale_x':      scale_x,
-        'scale_y':      scale_y,
-        'content_left': content_left,
-        'content_top':  content_top,
-        'offset_x':     offset_x,
-        'offset_y':     offset_y,
+        "scale_x":      scale_x,
+        "scale_y":      scale_y,
+        "content_left": content_left,
+        "content_top":  content_top,
+        "offset_x":     offset_x,
+        "offset_y":     offset_y,
     }
     print(f"[TRANSFORM] scale_x={scale_x:.4f} scale_y={scale_y:.4f} "
           f"content_left={content_left} content_top={content_top} "
@@ -133,293 +167,246 @@ def make_transform(content_w, content_h, full_w, full_h,
     return t
 
 
-def apply_transform(x, y, t):
-    x_out = int((x - t['content_left']) * t['scale_x'] + t['offset_x'])
-    y_out = int((y - t['content_top'])  * t['scale_y'] + t['offset_y'])
+def apply_transform(x: float, y: float, t: dict):
+    x_out = int((x - t["content_left"]) * t["scale_x"] + t["offset_x"])
+    y_out = int((y - t["content_top"])  * t["scale_y"] + t["offset_y"])
     return x_out, y_out
 
 
-def draw_bbox_and_label(img, instance, instance_ind, label, t, show_bbox=True):
-    if not show_bbox:
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-instance colour — ported from visualiser_no_offsets.py
+# ─────────────────────────────────────────────────────────────────────────────
+
+def color_for_inst(idx: int) -> tuple:
+    if idx == 0:
+        return (0, 0, 255)
+    elif idx == 1:
+        return (0, 230, 255)
+    else:
+        b = min((97 * idx + 29) % 256 * 1.5, 255)
+        g = min((17 * idx + 91) % 256 * 1.5, 255)
+        r = min((37 * idx + 53) % 256 * 1.5, 255)
+        return (int(b), int(g), int(r))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Joint colouring
+# ─────────────────────────────────────────────────────────────────────────────
+
+def joint_colour(score: float, interpolated: bool,
+                 trust_threshold: float) -> tuple:
+    if interpolated:
+        return RED
+    return GREEN if score >= trust_threshold else YELLOW
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Draw one instance
+# ─────────────────────────────────────────────────────────────────────────────
+
+def draw_instance(canvas: np.ndarray, instance: dict, t: dict,
+                  trust_threshold: float, instance_idx: int):
+    kps    = instance.get("keypoints", [])
+    scores = instance.get("keypoint_scores", [0.0] * len(kps))
+    interp = instance.get("keypoint_interpolated", [False] * len(kps))
+    bbox   = instance.get("bbox", None)
+    tid    = instance.get("track_id", instance_idx)
+
+    if len(kps) != 17:
+        print(f"  Warning: instance {instance_idx} has {len(kps)} keypoints, expected 17. Skipping.")
         return
-    h, w = img.shape[:2]
-    x1, y1, x2, y2 = map(float, instance['bbox'][:4])
-    x1, y1 = apply_transform(x1, y1, t)
-    x2, y2 = apply_transform(x2, y2, t)
-    x1 = clamp_int(x1, 0, w - 1)
-    y1 = clamp_int(y1, 0, h - 1)
-    x2 = clamp_int(x2, 0, w - 1)
-    y2 = clamp_int(y2, 0, h - 1)
-    color = color_for_inst(instance_ind)
-    # cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-    cv2.putText(img, label, (x1, max(y1 - 5, 0)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2, cv2.LINE_AA)
+
+    inst_col = color_for_inst(instance_idx)
+
+    # bounding box + label
+    if bbox and len(bbox) >= 4:
+        x1b, y1b, x2b, y2b = map(float, bbox[:4])
+        tx1, ty1 = apply_transform(x1b, y1b, t)
+        tx2, ty2 = apply_transform(x2b, y2b, t)
+        h, w = canvas.shape[:2]
+        tx1 = max(0, min(tx1, w - 1))
+        ty1 = max(0, min(ty1, h - 1))
+        tx2 = max(0, min(tx2, w - 1))
+        ty2 = max(0, min(ty2, h - 1))
+        cv2.rectangle(canvas, (tx1, ty1), (tx2, ty2), inst_col, 1)
+        label = (f"Instance: {instance_idx}"
+                 if tid is None else f"Instance: {instance_idx} Track: {tid}")
+        cv2.putText(canvas, label, (tx1, max(ty1 - 5, 0)),
+                    FONT, 0.5, inst_col, 1, cv2.LINE_AA)
+
+    # bones
+    for (pa, ch) in BONE_PAIRS:
+        if pa >= len(kps) or ch >= len(kps):
+            continue
+        pt1 = apply_transform(*kps[pa], t)
+        pt2 = apply_transform(*kps[ch], t)
+        cv2.line(canvas, pt1, pt2, BONE_COLOUR, BONE_THICKNESS, cv2.LINE_AA)
+
+    # joints
+    for j, (x, y) in enumerate(kps):
+        score  = scores[j] if j < len(scores) else 0.0
+        is_int = interp[j] if j < len(interp) else False
+        col    = joint_colour(score, is_int, trust_threshold)
+        pt     = apply_transform(x, y, t)
+        cv2.circle(canvas, pt, JOINT_RADIUS, col,       -1, cv2.LINE_AA)
+        cv2.circle(canvas, pt, JOINT_RADIUS, (0, 0, 0),  1, cv2.LINE_AA)
 
 
-def draw_joint_bbox(img, x, y, color, area=32):
-    half = area // 2
-    cv2.rectangle(img, (x - half, y - half), (x + half, y + half), color, 2)
+# ─────────────────────────────────────────────────────────────────────────────
+# HUD
+# ─────────────────────────────────────────────────────────────────────────────
+
+def draw_hud(canvas: np.ndarray, frame_id_display: int, n_instances: int):
+    h, w = canvas.shape[:2]
+
+    # top-left: frame + instance count
+    cv2.putText(canvas,
+                f"Frame: {frame_id_display}  Instances: {n_instances}",
+                (10, 30), FONT, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
+
+    # bottom-right: colour legend
+    legend = [(GREEN, "trust"), (YELLOW, "partial"), (RED, "interpolated")]
+    xb, yb = w - 170, h - 10
+    for colour, text in reversed(legend):
+        cv2.circle(canvas, (xb, yb - 3), 5, colour, -1)
+        cv2.putText(canvas, text, (xb + 12, yb),
+                    FONT, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+        yb -= 20
 
 
-def get_x_y_from_inst(joints_map, frame_id, instance_id, joint_name, keypoint_name2id):
-    joint_id = keypoint_name2id.get(joint_name)
-    if joint_id is None:
-        raise ValueError(f"Joint '{joint_name}' not found in keypoint_name2id")
-    pt = joints_map[frame_id][instance_id][joint_id]
-    return int(pt['x']), int(pt['y'])
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
 
+def main():
+    ap = argparse.ArgumentParser(
+        description="Skeleton overlay of cleaned 17-kp JSON on film footage")
+    ap.add_argument("--json",               required=True,
+                    help="Cleaned 17-keypoint JSON")
+    ap.add_argument("--mp4",                required=True,
+                    help="Display video (frames are read from here)")
+    ap.add_argument("--segment_mp4",        default=None,
+                    help="Letterboxed segment mp4 used ONLY for letterbox "
+                         "detection. If omitted, --mp4 is used.")
+    ap.add_argument("--start",              type=int, default=0)
+    ap.add_argument("--end",                type=int, default=None)
+    ap.add_argument("--output_path",        default=None)
+    ap.add_argument("--trust_threshold",    type=float, default=0.7)
+    ap.add_argument("--use_segment_offsets", action="store_true",
+                    help="Skip auto-detection; use hardcoded Tron geometry "
+                         f"(content_w={TRON_CONTENT_W}, "
+                         f"content_h={TRON_CONTENT_H}, "
+                         f"offset_x={TRON_OFFSET_X})")
+    args = ap.parse_args()
 
-def _segment_start_from_path(path: str) -> int:
-    m = re.search(r"segment_(\d+)", Path(path).name)
-    return int(m.group(1)) if m else 0
+    # ── load JSON ─────────────────────────────────────────────────────────
+    print(f"Loading JSON: {args.json}")
+    frame_map = build_frame_map(load_json(args.json))
+    print(f"  Loaded {len(frame_map)} frames from JSON.")
 
+    # ── open display video ────────────────────────────────────────────────
+    cap = cv2.VideoCapture(args.mp4)
+    if not cap.isOpened():
+        sys.exit(f"ERROR: cannot open video: {args.mp4}")
 
-def resize_frame_to_match(frame1, frame2):
-    if frame1.shape != frame2.shape:
-        frame2 = cv2.resize(frame2, (frame1.shape[1], frame1.shape[0]))
-    return frame2
-
-
-def new_df(data, keypoint_id2name, keypoint_name2id, joint, start):
-    rows = []
-    seen_keys = set()
-    for frame in data['instance_info']:
-        frame_id = int(frame['frame_id']) - 1 + (start if start else 0)
-        
-        for instance_ind, instance in enumerate(frame.get('instances', [])):
-            track_id = instance.get('track_id', None)
-            keypoints = instance.get('keypoints', [])
-            confidences = instance.get('keypoint_scores', [])
-            key = (frame_id, instance_ind, track_id)
-            if key in seen_keys:
-                print(f"DUPLICATE: frame_id={frame_id}, instance_id={instance_ind}, track_id={track_id}")
-            seen_keys.add(key)
-            for joint_id, keypoint in enumerate(keypoints):
-                # if joint_id in lower_body_ids:
-                joint_name = keypoint_id2name.get(str(joint_id), f"joint_{joint_id}")
-                # Only include rows for the selected joint
-                if joint is not None and joint_name != joint:
-                    continue
-                x, y = keypoint[0], keypoint[1]
-                confidence = confidences[joint_id] if joint_id < len(confidences) else None
-                rows.append({
-                    'frame_id': frame_id,
-                    'instance_id': instance_ind,
-                    'track_id': track_id,
-                    'joint_id': joint_id,
-                    'joint_name': joint_name,
-                    'x': x,
-                    'y': y,
-                    'mmpose_confidence': confidence,
-                    'reliability_category': None,  # trust/partial/dont_trust/cant_tell
-                    'annotator_confidence': None,  # 3 levels now, not 5
-                    'reason_for_distrust': None,   # only filled if partial/dont trust
-                    'dist_to_boundary': None,      # compute this automatically, don't annotate
-                    'valid': None,
-                })
-    return pd.DataFrame(rows)
-
-
-def main(mp4_path, json_path, start, end, create_new_df_flag,
-         video_nobbox, start_nobbox, output_path, joint,
-         show_bbox, show_joint_bbox, segment_mp4,
-         use_segment_offsets):
-
-    cap    = cv2.VideoCapture(mp4_path)
-    fps    = cap.get(cv2.CAP_PROP_FPS)
-    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps          = cap.get(cv2.CAP_PROP_FPS) or 24.0
+    vid_w        = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    vid_h        = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
 
-    # TRON_CONTENT_W/H/OFFSET_X are the empirically confirmed values for the
-    # Tron letterboxed segment geometry. Used when --use_segment_offsets is passed.
-    TRON_CONTENT_W = 650
-    TRON_CONTENT_H = 359
-    TRON_OFFSET_X  = 10
+    start_frame = max(0, args.start)
+    end_frame   = min(total_frames - 1,
+                      args.end if args.end is not None else total_frames - 1)
 
-    if use_segment_offsets:
-        print(f"[TRANSFORM] Using hardcoded segment offsets: "
-              f"content={TRON_CONTENT_W}x{TRON_CONTENT_H} offset_x={TRON_OFFSET_X}")
-        t = make_transform(TRON_CONTENT_W, TRON_CONTENT_H, width, height,
+    print(f"Video: {vid_w}x{vid_h} @ {fps:.2f} fps | "
+          f"displaying frames {start_frame}–{end_frame} of {total_frames}")
+
+    # ── build coordinate transform ────────────────────────────────────────
+    if args.use_segment_offsets:
+        print(f"[TRANSFORM] Using hardcoded Tron segment offsets")
+        t = make_transform(TRON_CONTENT_W, TRON_CONTENT_H, vid_w, vid_h,
                            0, 0, TRON_OFFSET_X, 0)
     else:
-        seg_path = segment_mp4 if segment_mp4 is not None else mp4_path
+        seg_path = args.segment_mp4 if args.segment_mp4 is not None else args.mp4
         auto_w, auto_h, content_left, content_top = detect_content_region(seg_path)
-        t = make_transform(auto_w, auto_h, width, height,
+        t = make_transform(auto_w, auto_h, vid_w, vid_h,
                            content_left, content_top, 0, 0)
 
+    # ── optional output writer ────────────────────────────────────────────
     writer = None
-    if output_path is not None:
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        writer = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
-        print(f"[INFO] Writing to: {output_path}")
+    if args.output_path:
+        Path(args.output_path).parent.mkdir(parents=True, exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(args.output_path,
+                                 fourcc, fps, (vid_w, vid_h))
+        print(f"Writing output to: {args.output_path}")
 
-    json_data, json_dict = load_json(json_path)
-    meta          = json_data['meta_info']
-    instances_map = frame_to_instances_map(json_data)
-    joints_map    = frame_to_joints_map(json_data)
+    # ── frame cache for random-access navigation ──────────────────────────
+    cap = cv2.VideoCapture(args.mp4)
+    frame_cache: dict = {}
 
-    cap = cv2.VideoCapture(mp4_path)
+    def get_frame(idx: int):
+        if idx in frame_cache:
+            return frame_cache[idx]
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frm = cap.read()
+        if not ret:
+            return None
+        frame_cache[idx] = frm
+        return frm
 
-    if start is None:
-        start = 0
-    video_frame_offset = start
-    frame_id = 0
-
-    cap_nobbox                 = None
-    fps_ratio                  = 1.0
-    frame_id_nobbox            = 0
-    frame_id_nobbox_fractional = 0.0
-    segment_start_frame        = 0
-
-    if video_nobbox is not None:
-        cap_nobbox = cv2.VideoCapture(video_nobbox)
-        if start_nobbox is None:
-            start_nobbox = 0
-        segment_start_frame = _segment_start_from_path(mp4_path)
-        fps_main   = cap.get(cv2.CAP_PROP_FPS)
-        fps_nobbox = cap_nobbox.get(cv2.CAP_PROP_FPS)
-        fps_ratio  = fps_nobbox / fps_main
-        time_offset                = (segment_start_frame + video_frame_offset) / fps_main
-        frame_id_nobbox            = int(time_offset * fps_nobbox)
-        frame_id_nobbox_fractional = time_offset * fps_nobbox - frame_id_nobbox
-
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    if end is None or end < 0:
-        end = total - 1
-
-    if create_new_df_flag == 1:
-        if os.path.exists("rows_df.csv"):
-            os.remove("rows_df.csv")
-        df = new_df(json_data,
-                    meta['keypoint_id2name'], meta['keypoint_name2id'],
-                    joint, start)
-
-        df = add_geometric_plausibility(df, json_data, conf_threshold=0.3)
-
-        # Add boundary distance — you need frame width/height from cap
-        df = compute_boundary_distance(df, width, height)
-        df_name = f"{json_dict['parent_dir']}_{json_dict['file_name']}.csv"
-        df.to_csv(df_name, index=False)
-        print(f"Created {df_name} with {len(df)} rows.")
-
+    # ── window ────────────────────────────────────────────────────────────
     cv2.namedWindow("overlay", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("overlay", width, height)
+    cv2.resizeWindow("overlay", vid_w, vid_h)
+
+    current = start_frame
 
     while True:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id + video_frame_offset)
-        if frame_id + video_frame_offset > end:
-            break
-        ok, frame = cap.read()
-        if not ok:
+        if current > end_frame:
             break
 
-        frame_nobbox = None
-        if cap_nobbox is not None:
-            cap_nobbox.set(cv2.CAP_PROP_POS_FRAMES, frame_id_nobbox)
-            _, frame_nobbox = cap_nobbox.read()
+        frame = get_frame(current)
+        if frame is None:
+            print(f"Warning: could not read frame {current}, stopping.")
+            break
 
-        instances = instances_map.get(frame_id, [])
+        # frame_map is 0-indexed (frame_id - 1 already applied in build_frame_map)
+        instances = frame_map.get(current, [])
 
-        cv2.putText(frame,
-                    f"Frame: {frame_id + video_frame_offset}  Instances: {len(instances)}",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2, cv2.LINE_AA)
-
-        for instance_ind, instance in enumerate(instances):
-            track_id = instance.get('track_id', None)
-            color    = color_for_inst(instance_ind)
-            label    = (f"Instance: {instance_ind}" if track_id is None
-                        else f"Instance: {instance_ind} Track: {track_id}")
-
-            draw_bbox_and_label(frame, instance, instance_ind, label,
-                                t=t, show_bbox=show_bbox)
-
-            if joint is not None and show_joint_bbox:
-                x, y     = get_x_y_from_inst(joints_map, frame_id, instance_ind,
-                                              joint, meta['keypoint_name2id'])
-                x_t, y_t = apply_transform(x, y, t)
-                draw_joint_bbox(frame, x_t, y_t, color=color)
-                cv2.circle(frame, (x_t, y_t), 5, color, -1)
+        canvas = frame.copy()
+        for idx, inst in enumerate(instances):
+            draw_instance(canvas, inst, t, args.trust_threshold, idx)
+        draw_hud(canvas, current, len(instances))
 
         if writer is not None:
-            writer.write(frame)
+            writer.write(canvas)
 
-        # cv2.putText(display_frame, f"Frame: {frame_id}",
-        #                 (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2, cv2.LINE_AA)
+        cv2.imshow("overlay", canvas)
+        key = cv2.waitKeyEx(0 if writer is None else 1) & 0xFF
 
-        if frame_nobbox is not None:
-            frame_nobbox  = resize_frame_to_match(frame, frame_nobbox)
-            display_frame = cv2.vconcat([frame, frame_nobbox])
-            text_y = display_frame.shape[0] // 2
-            cv2.putText(display_frame, f"Frame: {frame_id}",
-                        (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2, cv2.LINE_AA)
-            cv2.putText(display_frame, f"Frame: {frame_id_nobbox}",
-                        (10, text_y+30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,255), 2, cv2.LINE_AA)
-        else:
-            display_frame = frame
-
-        cv2.imshow("overlay", display_frame)
-        key = cv2.waitKeyEx(0)
+        if writer is not None:
+            current += 1
+            continue
 
         if key == ord('q'):
             break
         elif key == ord('s'):
-            frame_id += 1
-            if cap_nobbox is not None:
-                frame_id_nobbox_fractional += fps_ratio
-                frame_id_nobbox            += int(frame_id_nobbox_fractional)
-                frame_id_nobbox_fractional -= int(frame_id_nobbox_fractional)
+            current = min(current + 1, end_frame)
         elif key == ord('a'):
-            frame_id = max(0, frame_id - 1)
-            if cap_nobbox is not None:
-                segment_start_offset        = int((segment_start_frame + start) / fps_ratio)
-                frame_id_nobbox_fractional -= fps_ratio
-                frame_id_nobbox            += int(frame_id_nobbox_fractional)
-                frame_id_nobbox_fractional -= int(frame_id_nobbox_fractional)
-                frame_id_nobbox             = max(segment_start_offset, frame_id_nobbox)
+            current = max(current - 1, start_frame)
+        elif key == ord('d'):
+            current = min(current + 10, end_frame)
+        # any other key: redraw same frame
 
-    cv2.destroyAllWindows()
-    if cap_nobbox is not None:
-        cap_nobbox.release()
+    # ── cleanup ───────────────────────────────────────────────────────────
+    cap.release()
     if writer is not None:
         writer.release()
-        print("[INFO] Done.")
+        print(f"Saved: {args.output_path}")
+    cv2.destroyAllWindows()
+    print("Done.")
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--json",            required=True)
-    ap.add_argument("--mp4",             required=True,
-                    help="Display video (full movie for letterboxed segments, "
-                         "or the segment itself if no letterboxing)")
-    ap.add_argument("--segment_mp4",     default=None,
-                    help="The letterboxed segment mp4 the JSON was generated from. "
-                         "If omitted, --mp4 is used (assumes no letterboxing).")
-    ap.add_argument("--start",           type=int)
-    ap.add_argument("--end",             type=int)
-    ap.add_argument("--create_new_df",   type=int, default=0)
-    ap.add_argument("--video_nobbox",    default=None)
-    ap.add_argument("--start_nobbox",    type=int, default=0)
-    ap.add_argument("--output_path",     default=None)
-    ap.add_argument("--joint",           default=None)
-    ap.add_argument("--show_bbox",       type=int, default=1)
-    ap.add_argument("--show_joint_bbox", type=int, default=1)
-    ap.add_argument("--use_segment_offsets", action="store_true",
-                    help="Apply hardcoded Tron segment geometry "
-                         "(content_w=650, content_h=359, offset_x=10). "
-                         "Use for letterboxed Tron segments displayed on full 1920x1080 movie.")
-
-    args = ap.parse_args()
-    main(
-        args.mp4, args.json,
-        args.start, args.end,
-        args.create_new_df,
-        args.video_nobbox, args.start_nobbox,
-        args.output_path,
-        args.joint,
-        bool(args.show_bbox),
-        bool(args.show_joint_bbox),
-        args.segment_mp4,
-        args.use_segment_offsets,
-    )
+    main()

@@ -189,7 +189,8 @@ META_INFO_ROOT="/isi/mep-rip/working/deepscreens/python/film_data.json"
 SCRATCH_BASE="/scratch/deepscreens"
 
 # Centralized conda environment paths (used by conda activate later)
-CONDA_SH="/dartfs-hpc/rc/lab/M/MEP/sharedconda/miniconda3/etc/profile.d/conda.sh"
+# CONDA_SH="/dartfs-hpc/rc/lab/M/MEP/sharedconda/miniconda3/etc/profile.d/conda.sh"
+CONDA_SH="/optnfs/common/miniconda3/etc/profile.d/conda.sh"
 CONDA_ENV_MMPOSE="/isi/mep-rip/working/shared_miniconda/mmpose"
 CONDA_ENV_RTMW="/isi/mep-rip/working/shared_miniconda/rtmw" #for both rtmw and hybrid
 CONDA_ENV_PYSCENE="/isi/mep-rip/working/shared_miniconda/pyscenedetect"
@@ -683,6 +684,19 @@ if [ -f "${PYSCENE_CSV_FINAL}" ]; then
         echo "Warning: Failed to copy existing scene detection file to scratch" >&2
     }
     echo "Skipping pyscenedetect step."
+
+    # Copy existing segment MP4s from network storage to scratch pyscenedetect dir
+    echo "Copying existing segment MP4s to scratch..."
+    seg_copied=0
+    for seg_mp4 in "${OUTPUT_MMPOSE_FINAL}/${base_name}"/segment_*.mp4; do
+        if [ -f "${seg_mp4}" ]; then
+            cp "${seg_mp4}" "${OUTPUT_PYSCENE}/" || {
+                echo "Warning: Failed to copy $(basename ${seg_mp4}) to scratch" >&2
+            }
+            ((seg_copied++))
+        fi
+    done
+    echo "Copied ${seg_copied} segment MP4(s) to scratch."
 else
     echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') pyscenedetect: Scenes CSV missing. Will run pyscenedetect."
     conda activate "${CONDA_ENV_PYSCENE}"

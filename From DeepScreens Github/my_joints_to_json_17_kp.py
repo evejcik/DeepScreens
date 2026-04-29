@@ -156,7 +156,7 @@ def build_cleaned_json_per_film(original_json_path, df, output_path, film):
             lookup[key] = {
                 'x' : row['x'],
                 'y' : row['y'],
-                'trust_prob' : row['prob_trust'],
+                'prob_unreliable' : row['prob_unreliable'],
                 'interpolated' : False
             }
         
@@ -189,7 +189,7 @@ def build_cleaned_json_per_film(original_json_path, df, output_path, film):
                     if key in lookup:
                         entry = lookup[key]
                         new_keypoints[joint_id_h36m]    = [entry['x'], entry['y']]
-                        new_scores[joint_id_h36m]       = entry['trust_prob']
+                        new_scores[joint_id_h36m]       = entry['prob_unreliable']
                         new_interpolated[joint_id_h36m] = entry['interpolated']
 
                 instance['keypoints']             = new_keypoints
@@ -212,11 +212,127 @@ def build_cleaned_json_per_film(original_json_path, df, output_path, film):
         print(result['instance_info'][0]['instances'][0]['bbox'])
 
 
-def main(json, csv, output_path):
+def probs_distribs(df):
+    """
+    Print probability distribution statistics to help determine
+    reliability threshold selection.
+    """
+    reliable   = df[df['reliability_category_int'] == 0]
+    unreliable = df[df['reliability_category_int'] == 1]
+
+    films = df['film'].unique()
+
+    for film in films:
+        print(f"\n{'='*60}")
+        print(f"  FILM: {film}")
+        print(f"{'='*60}")
+
+        film_df   = df[df['film'] == film]
+        film_rel  = reliable[reliable['film'] == film]
+        film_unrel = unreliable[unreliable['film'] == film]
+
+        total   = len(film_df)
+        n_rel   = len(film_rel)
+        n_unrel = len(film_unrel)
+
+        print(f"\n  Sample counts:")
+        print(f"    Total joints:      {total}")
+        print(f"    Reliable:          {n_rel}  ({100*n_rel/total:.1f}%)")
+        print(f"    Unreliable:        {n_unrel}  ({100*n_unrel/total:.1f}%)")
+
+        # --- Overall distribution ---
+        p = film_df['prob_trust']
+        print(f"\n  Overall prob_trust distribution:")
+        print(f"    Mean:   {p.mean():.4f}")
+        print(f"    Median: {p.median():.4f}")
+        print(f"    Std:    {p.std():.4f}")
+        print(f"    Min:    {p.min():.4f}")
+        print(f"    Max:    {p.max():.4f}")
+        print(f"    10th pct: {p.quantile(0.10):.4f}")
+        print(f"    25th pct: {p.quantile(0.25):.4f}")
+        print(f"    75th pct: {p.quantile(0.75):.4f}")
+        print(f"    90th pct: {p.quantile(0.90):.4f}")
+
+        # --- By class ---
+        print(f"\n  By reliability class:")
+        print(f"    {'Metric':<18} {'Reliable':>12} {'Unreliable':>12}")
+        print(f"    {'-'*44}")
+        for metric, func in [
+            ('Mean',   lambda x: x.mean()),
+            ('Median', lambda x: x.median()),
+            ('Std',    lambda x: x.std()),
+            ('Min',    lambda x: x.min()),
+            ('Max',    lambda x: x.max()),
+            ('10th pct', lambda x: x.quantile(0.10)),
+            ('25th pct', lambda x: x.quantile(0.25)),
+            ('75th pct', lambda x: x.quantile(0.75)),
+            ('90th pct', lambda x: x.quantile(0.90)),
+        ]:
+            r_val  = func(film_rel['prob_trust'])  if len(film_rel)  > 0 else float('nan')
+            u_val  = func(film_unrel['prob_trust']) if len(film_unrel) > 0 else float('nan')
+            print(f"    {metric:<18} {r_val:>12.4f} {u_val:>12.4f}")
+
+        # --- Threshold analysis ---
+        print(f"\n  Threshold analysis (what gets flagged as unreliable):")
+        print(f"    {'Threshold':<12} {'TP rate':>10} {'FP rate':>10} {'Precision':>10} {'F1':>8}")
+        print(f"    {'-'*54}")
+        for thresh in [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+            # Predicted unreliable = prob_trust < threshold
+            pred_unrel = film_df['prob_trust'] > thresh
+            actual_unrel = film_df['reliability_category_int'] == 1
+
+            tp = (pred_unrel & actual_unrel).sum()
+            fp = (pred_unrel & ~actual_unrel).sum()
+            fn = (~pred_unrel & actual_unrel).sum()
+
+            tpr       = tp / (tp + fn)   if (tp + fn) > 0   else 0.0
+            fpr       = fp / n_rel        if n_rel > 0        else 0.0
+            precision = tp / (tp + fp)    if (tp + fp) > 0    else 0.0
+            f1        = 2 * precision * tpr / (precision + tpr) if (precision + tpr) > 0 else 0.0
+
+            print(f"    {thresh:<12.1f} {tpr:>10.4f} {fpr:>10.4f} {precision:>10.4f} {f1:>8.4f}")
+
+        # --- Per joint breakdown ---
+        print(f"\n  Per-joint mean prob_trust (reliable vs unreliable):")
+        print(f"    {'Joint ID':<10} {'Joint name':<20} {'Rel mean':>10} {'Unrel mean':>12} {'Separation':>12}")
+        print(f"    {'-'*66}")
+
+        joint_names = {
+            0: 'root', 1: 'R_hip', 2: 'R_knee', 3: 'R_ankle',
+            4: 'L_hip', 5: 'L_knee', 6: 'L_ankle', 7: 'spine',
+            8: 'thorax', 9: 'neck_base', 10: 'head',
+            11: 'L_shoulder', 12: 'L_elbow', 13: 'L_wrist',
+            14: 'R_shoulder', 15: 'R_elbow', 16: 'R_wrist'
+        }
+
+        for jid in range(17):
+            j_rel   = film_rel[film_rel['joint_id'] == jid]['prob_trust']
+            j_unrel = film_unrel[film_unrel['joint_id'] == jid]['prob_trust']
+            if len(j_rel) == 0 and len(j_unrel) == 0:
+                continue
+            r_mean  = j_rel.mean()   if len(j_rel)   > 0 else float('nan')
+            u_mean  = j_unrel.mean() if len(j_unrel) > 0 else float('nan')
+            sep     = r_mean - u_mean if not (np.isnan(r_mean) or np.isnan(u_mean)) else float('nan')
+            print(f"    {jid:<10} {joint_names.get(jid,''):<20} {r_mean:>10.4f} {u_mean:>12.4f} {sep:>12.4f}")
+
+    print(f"\n{'='*60}")
+    print("  THRESHOLD RECOMMENDATION GUIDE")
+    print(f"{'='*60}")
+    print("  High TP rate, higher FP rate -> lower threshold (more aggressive flagging)")
+    print("  High precision, lower TP rate -> higher threshold (more conservative)")
+    print("  F1 peak = best balance between catching unreliable joints")
+    print("  and not discarding reliable ones")
+    print(f"{'='*60}\n")
+
+
+def main(film, json, csv, output_path):
     df = pd.read_csv(csv)
     # for film in df['film'].unique():
-    film = 'Moonlight_1_1529'
+    # film = 'Moonlight_1_1529'
     build_cleaned_json_per_film(json, df, output_path, film)
+    probs_distribs(df)
+    print(df.columns.tolist())
+    print(df['reliability_category_int'].value_counts() if 'reliability_category_int' in df.columns else "column missing")
     print("Done!")
 
 if __name__ == "__main__":
@@ -228,44 +344,10 @@ if __name__ == "__main__":
     args = ap.parse_args()
 
     main(
+        film = 'Ramona_1_1639',
         # '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/emma_clip_results_2/Moonlight_2016/Moonlight_2016/segment_1_1529.json',
-        '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/ramona-demo-clip 1_1369/segment_1_1639.json',
-        '/Users/emmavejcik/Desktop/DeepScreens/Classification/Long_Data_with_probs.csv',
-        '/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/my_17_json.json'
+        json = '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/ramona-demo-clip 1_1369/segment_1_1639.json',
+        csv = '/Users/emmavejcik/Desktop/DeepScreens/Feature_Engineering/Long_Data_with_probs.csv',
+        output_path = '/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/my_17_json.json'
     )
-
-
-        #subtract one from json 
-
-        #meta_info: -> dictionary -> these values I need to delete and fill in with my own: containing keys, num_keypoints: 17, keypoint_id2name, keypoint_name2id, 
-        #do i need to cut down on the flip_indices, pairs, keypoint_colors, etc. that all contain 133 values? 
-        #num_skeleton_links = 65, skeleton_links, skeleton_links_colors, should I cut this down?
-        #dataset_keypoint_weights -> what is this?
-        #what is sigmas? is this the sigmoid smoothing function?
-        #skip everything in meta_info_3d
-        #dig into: instance_info['frame_id']['instances']['keypoints']
-        #make my own dictionary first in this format
-
-        #take in one film at a time
-        #should I group by frame, then instances?
-        
-
-
-#         for (frame, instance, joint), group in df.groupby(['frame','instance']).apply(lambda x: x.sort_values('joint_id')):
-
-#             # x = df.loc[(df['frame_id'] == frame) & (df['instance'] == instance) & (df['joint_id'] == joint), 'x_filled']
-#             # y = 
-#             
-#                 # frames_since_dont_trust = 0 if row['reliability_category_int'] == 2 else frames_since_dont_trust + 1 if frames_since_dont_trust >= 0 else -1
-#                 # results[idx] = frames_since_dont_trust
-
-#                 # keypoints.append(['x_filled', 'y_filled'])
-            
-#             instances = np.array([{"keypoints" : keypoints}], dtype = object)
-
-#         # print(data.keys())
-#         # print(type(data['instance_info']))
-#         # print(data['instance_info'][0].keys())
-#         # print(data['instance_info'][0]['instances'][0].keys())
-            
 

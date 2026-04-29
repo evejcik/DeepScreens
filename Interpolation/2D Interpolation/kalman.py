@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+from kalman import KalmanFilter
 
 #Source: https://www.geeksforgeeks.org/python/kalman-filter-in-python/
 
@@ -26,8 +28,8 @@ class KalmanFilter:
         self.P = np.dot(I - np.dot(K, self.H), self.P)
         return self.x
 
-import numpy as np
-from kalman import KalmanFilter
+
+
 
 dt = 1.0
 
@@ -48,22 +50,15 @@ R_base_trust   = np.diag([5.0,  5.0])
 R_base_partial = np.diag([50.0, 50.0])
 
 
-def reliability_to_R(reliability_int, trust_prob):
-    """
-    Scale observation noise based on classifier output.
-    trust_prob: predicted probability of trust class (0.0 to 1.0)
-    Higher trust_prob -> smaller R -> filter trusts the observation more.
-    """
-    if reliability_int == 0:  # trust
+def reliability_to_R(reliability_int, prob_unreliable):
+    if reliability_int == 0:  # reliable
         scale = 1.0
         return R_base_trust * scale
-    elif reliability_int == 1:  # partial_trust
-        # scale R inversely with trust probability
-        # trust_prob=0.5 -> scale=10, trust_prob=0.9 -> scale~2
-        scale = 1.0 / (trust_prob + 0.05)  # +0.05 avoids div by zero
+    elif reliability_int == 1:  # partial — but in your new encoding this is unreliable
+        # higher prob_unreliable -> larger R -> filter trusts observation less
+        scale = 1.0 / (1.0 - prob_unreliable + 0.05)
         return R_base_partial * scale
     else:
-        # dont_trust — caller should not be calling update() for these
         return R_base_partial * 100.0
 
 
@@ -122,8 +117,8 @@ def apply_kalman_to_group(group_df):
         predicted = kf.predict(u)
 
         if rel in [0, 1]:  # trust or partial_trust — update with observation
-            trust_prob = row.get('trust_probability', 0.5 if rel == 1 else 0.9)
-            R_current  = reliability_to_R(rel, trust_prob)
+            prob_unreliable = row.get('prob_unreliable', 0.5 if rel == 1 else 0.9)
+            R_current  = reliability_to_R(rel, prob_unreliable)
             kf.R       = R_current
 
             z = np.array([[row['x']],
