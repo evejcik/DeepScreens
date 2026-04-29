@@ -245,8 +245,149 @@ def lightGBM_clf(csv_path, k=3):
     joblib.dump(model, 'lgbm_reliability_model.pkl')
     print("Model saved to lgbm_reliability_model.pkl")
 
+def ablation_studies(csv_path):
+    data = load_and_prepare(csv_path)
+
+    annotated_mask = data[TARGET].notna()
+    train_data = data[data['film_id'].isin(TRAIN_FILM_IDS) & annotated_mask]
+    test_data  = data[
+        data['film_id'].isin(TEST_FILM_IDS) &
+        data['joint_name'].isin(PSYCHO_JOINTS) &
+        annotated_mask
+    ]
+
+    y_train = train_data[TARGET]
+    y_test  = test_data[TARGET]
+    groups  = train_data['film']
+
+    feature_sets = {
+        'confidence_only':  ['mmpose_confidence'],
+        'geometric_only':   ['dist_to_boundary', 'bone_ratio', 'bone_length', 'geom_plausible', 'joint_id'],
+        'all_features':     FEATURES,
+    }
+
+    results = {}
+
+    for name, features in feature_sets.items():
+        print(f"\n{'='*60}")
+        print(f"ABLATION: {name}")
+        print(f"Features: {features}")
+        print(f"{'='*60}")
+
+        X_train = train_data[features]
+        X_test  = test_data[features]
+
+        # get mean best iter via CV
+        group_kfold = GroupKFold(n_splits=3)
+        best_iters  = []
+
+        for i, (train_idx, val_idx) in enumerate(group_kfold.split(X_train, y_train, groups)):
+            Xt, Xv = X_train.iloc[train_idx], X_train.iloc[val_idx]
+            yt, yv = y_train.iloc[train_idx], y_train.iloc[val_idx]
+
+            sample_weights = yt.map(CLASS_WEIGHTS)
+            lgb_train   = lgb.Dataset(Xt, label=yt, weight=sample_weights)
+            lgb_val_set = lgb.Dataset(Xv, label=yv, reference=lgb_train)
+
+            model = lgb.train(
+                PARAMS,
+                lgb_train,
+                num_boost_round=1000,
+                valid_sets=[lgb_train, lgb_val_set],
+                valid_names=["train", "val"],
+                callbacks=[lgb.early_stopping(50)],
+            )
+            best_iters.append(model.best_iteration)
+
+        best_iter = int(np.median(best_iters))
+        print(f"Median best iteration: {best_iter}")
+
+        # final model
+        sample_weights = y_train.map(CLASS_WEIGHTS)
+        lgb_full = lgb.Dataset(X_train, label=y_train, weight=sample_weights)
+        final_model = lgb.train(PARAMS, lgb_full, num_boost_round=best_iter)
+
+        # evaluate
+        y_pred_prob = final_model.predict(X_test)
+        y_pred      = (y_pred_prob >= 0.5).astype(int)
+
+        acc  = accuracy_score(y_test, y_pred)
+        prec = precision_score(y_test, y_pred, average='macro')
+        rec  = recall_score(y_test, y_pred, average='macro')
+        f1   = f1_score(y_test, y_pred, average='macro')
+
+        print(classification_report(y_test, y_pred))
+        print(f"Accuracy:  {acc:.3f}")
+        print(f"Precision: {prec:.3f}")
+        print(f"Recall:    {rec:.3f}")
+        print(f"F1:        {f1:.3f}")
+
+        results[name] = {'accuracy': acc, 'precision': prec, 'recall': rec, 'f1': f1}
+
+        # cases where mmpose is confident but geometric flags as implausible
+        if name == 'geometric_only':
+            geometric_preds = y_pred
+            geometric_probs = y_pred_prob
+        if name == 'confidence_only':
+            confidence_preds = y_pred
+
+    # summary table
+    print(f"\n{'='*60}")
+    print("ABLATION SUMMARY")
+    print(f"{'='*60}")
+    print(f"{'Model':<25} {'Accuracy':>10} {'Precision':>10} {'Recall':>10} {'F1':>10}")
+    print(f"{'-'*65}")
+    for name, metrics in results.items():
+        print(f"{name:<25} {metrics['accuracy']:>10.3f} {metrics['precision']:>10.3f} "
+              f"{metrics['recall']:>10.3f} {metrics['f1']:>10.3f}")
+
+    # cases where geometric catches what confidence misses
+    print(f"\n{'='*60}")
+    print("DISAGREEMENT ANALYSIS: geometric vs confidence")
+    print(f"{'='*60}")
+    test_analysis = test_data[['joint_name', 'mmpose_confidence', 
+                                'bone_ratio', 'geom_plausible', 
+                                'dist_to_boundary', TARGET]].copy()
+    test_analysis['confidence_pred'] = confidence_preds
+    test_analysis['geometric_pred']  = geometric_preds
+    test_analysis['geometric_prob']  = geometric_probs
+
+    # geometric catches it, confidence misses it
+    geo_catches = test_analysis[
+        (test_analysis['geometric_pred'] == 1) &
+        (test_analysis['confidence_pred'] == 0) &
+        (test_analysis[TARGET] == 1)
+    ]
+    # confidence catches it, geometric misses it
+    conf_catches = test_analysis[
+        (test_analysis['confidence_pred'] == 1) &
+        (test_analysis['geometric_pred'] == 0) &
+        (test_analysis[TARGET] == 1)
+    ]
+    # both miss it
+    both_miss = test_analysis[
+        (test_analysis['confidence_pred'] == 0) &
+        (test_analysis['geometric_pred'] == 0) &
+        (test_analysis[TARGET] == 1)
+    ]
+
+    print(f"Geometric catches, confidence misses: {len(geo_catches)}")
+    print(f"Confidence catches, geometric misses: {len(conf_catches)}")
+    print(f"Both miss:                            {len(both_miss)}")
+    print(f"\nTop joints where geometric uniquely catches failures:")
+    print(geo_catches['joint_name'].value_counts().head(10))
+    print(f"\nTop joints where confidence uniquely catches failures:")
+    print(conf_catches['joint_name'].value_counts().head(10))
+
+    return results
+
 def main(csv_path):
+    data = pd.read_csv(csv_path)
+    annotated = data[data['reliability_category_int'].notna()]
+    print(annotated.groupby('film')['reliability_category_int'].value_counts(normalize=True))
+    
     lightGBM_clf(csv_path)
+    ablation_studies(csv_path)
     
 
 if __name__ == '__main__':

@@ -348,6 +348,6 @@ if __name__ == "__main__":
         # '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/emma_clip_results_2/Moonlight_2016/Moonlight_2016/segment_1_1529.json',
         json = '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/ramona-demo-clip 1_1369/segment_1_1639.json',
         csv = '/Users/emmavejcik/Desktop/DeepScreens/Feature_Engineering/Long_Data_with_probs.csv',
-        output_path = '/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/my_17_json.json'
+        output_path = f'/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/{film}_pred_aggregated.json'
     )
 
