@@ -454,34 +454,34 @@ def main(csv,k):
     # print("Final Data saved.")
 
 
-def main_unannotated(csv,k):
-    df = data_loader(csv)
+# def main_unannotated(csv,k):
+#     df = data_loader(csv)
 
-    df = confidence_mean_rolling(df, k)
-    df = confidence_std_rolling(df, k)
-    df = position_mean_rolling(df, k)
-    df = position_std_rolling(df,k)
-    df = position_velocity(df)
-    df = position_acceleration(df)
-    # df = frames_since_trust(df)
-    # df = frames_since_dont_trust(df)
-    # df = window_fractions(df)
-    df = film_int_encoding(df)
+#     df = confidence_mean_rolling(df, k)
+#     df = confidence_std_rolling(df, k)
+#     df = position_mean_rolling(df, k)
+#     df = position_std_rolling(df,k)
+#     df = position_velocity(df)
+#     df = position_acceleration(df)
+#     # df = frames_since_trust(df)
+#     # df = frames_since_dont_trust(df)
+#     # df = window_fractions(df)
+#     df = film_int_encoding(df)
 
 
-    df = df.drop(columns = [
-                            'joint_name.1', 
-                            'valid instance bbox', 
-                            'reliability_category', 
-                            'confidence_mean_wk',
-                            'x_velocity',
-                            'y_velocity'
-                            ], errors = 'ignore')
+#     df = df.drop(columns = [
+#                             'joint_name.1', 
+#                             'valid instance bbox', 
+#                             'reliability_category', 
+#                             'confidence_mean_wk',
+#                             'x_velocity',
+#                             'y_velocity'
+#                             ], errors = 'ignore')
 
-    df = clean_nans(df)
-    data_checking(df)
-    df.to_csv('Long Long Data.csv', index = False)
-    print("Final Data saved.")
+#     df = clean_nans(df)
+#     data_checking(df)
+#     df.to_csv('Long Long Data.csv', index = False)
+#     print("Final Data saved.")
 
     
 

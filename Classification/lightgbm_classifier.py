@@ -223,7 +223,7 @@ def main(df):
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument("--csv") ##default is Feature_Engineering/Long Data.csv
+    ap.add_argument("--csv", default = '../Feature_Engineering/Long Long Data.csv') ##default is Feature_Engineering/Long Data.csv
 
     args = ap.parse_args()
     main(
