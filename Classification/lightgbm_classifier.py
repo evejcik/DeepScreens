@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import warnings
 warnings.filterwarnings('ignore')
 import argparse
+import joblib
+
 
 # ── 0. Constants ──────────────────────────────────────────────────────────────
 
@@ -49,183 +51,207 @@ PSYCHO_JOINTS = ['left_elbow', 'right_hip', 'left_hip', 'left_shoulder', 'right_
 CLASS_WEIGHTS = {0: 1.0, 1: 2.0}
 # CLASS_WEIGHTS = {'Moonlight_1_1529': 1.0, 'Ramona_1_1639': 4.0, 'Tron_2059_2148' : 2.0} #for legibility
 
+RELEVANT_JOINT_IDS = list(range(17))  # COCO body joints only, no face mesh / fingers
+
+PARAMS = {
+    "objective":        "binary",
+    "metric":           ["auc", "binary_logloss"],
+    "boosting_type":    "gbdt",
+    "learning_rate":    0.05,
+    "num_leaves":       31,
+    "max_depth":        -1,
+    "feature_fraction": 0.8,
+    "bagging_fraction": 0.8,
+    "bagging_freq":     5,
+    "lambda_l1":        0.1,
+    "lambda_l2":        0.2,
+    "min_data_in_leaf": 20,
+    "verbose":          -1,
+}
+
 # ── 1. Prepare data ───────────────────────────────────────────────────────────
 
-def run_inference(model, features_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Run trained model on new unannotated data.
-    Returns features_df with prob_unreliable column added.
-    """
-    valid_mask = features_df[FEATURES].notna().all(axis=1)
-    X = features_df.loc[valid_mask, FEATURES].replace(-1, np.nan).fillna(-1)
-    probs = model.predict(X)
-    features_df.loc[valid_mask, 'prob_unreliable'] = probs
-    features_df.loc[~valid_mask, 'prob_unreliable'] = np.nan
-    return features_df
+def load_and_prepare(csv_path):
+    data = pd.read_csv(csv_path)
 
-def lightGBM_clf(df, k = 3):
-    #k is number of unique films we're passing in here
-    data = pd.read_csv(df)
-    data[TARGET] = data[TARGET].replace({0:0, 2: 1, 1:1})
-    print(data.isnull().sum()[data.isnull().sum() > 0])
-    train_data = data[data['film_id'].isin(TRAIN_FILM_IDS)]
-    test_data = data[(data['film_id'].isin(TEST_FILM_IDS)) & (data['joint_name'].isin(PSYCHO_JOINTS))]
-    print(test_data[TARGET].value_counts())
+    # Binarise: trust=0, partial+dont_trust=1; leave -1 (unannotated) untouched
 
-    X, y = train_data[FEATURES], train_data[TARGET]
+    annotated_mask = data[TARGET].notna()
+    data.loc[annotated_mask, TARGET] = data.loc[annotated_mask, TARGET].replace({0: 0, 1: 1, 2: 1})
 
-    # print(X_train[FEATURES].isnull().sum())
-    # print(y_train.value_counts())
-    # print(X_train.shape)
-    X_test, y_test = test_data[FEATURES], test_data[TARGET]
-    print(y_test.value_counts())
-    groups = train_data['film'] #putting film name not film id now just for legibility -> now groups is a series!, a n x 1 size array containing
-    #which film corresponds to which row in the data
-    group_kfold = GroupKFold(n_splits = k)
-    scaler = StandardScaler()
-    #GroupKFold.split() needs to know which group every single row belongs to, so it can ensure all rows from the same film stay together
-    # print(groups)
-    rows = []
+    print(f"Loaded {len(data)} rows.")
+    print(f"  Annotated:   {annotated_mask.sum()}")
+    print(f"  Unannotated: {(~annotated_mask).sum()}")
+    print(f"  Null counts:\n{data.isnull().sum()[data.isnull().sum() > 0]}\n")
 
-    for i, (train_index, val_index) in enumerate(group_kfold.split(X, y, groups)): #i = (0,1,2) -> how many folds there are, train_index and val index get arrays of integer positions for the train and validation data respectively
-        
+    return data
+
+def cross_validate(X, y, groups, X_test, y_test, k=3):
+    group_kfold  = GroupKFold(n_splits=k)
+    rows         = []
+    best_iters   = []
+
+    for i, (train_index, val_index) in enumerate(group_kfold.split(X, y, groups)):
         train_films = groups.iloc[train_index].unique()
-        val_films = groups.iloc[val_index].unique()
-        print(f"Fold {i}: train={train_films}, val={val_films}")
+        val_films   = groups.iloc[val_index].unique()
+        print(f"\nFold {i}: train={train_films}, val={val_films}")
 
         X_train, X_val = X.iloc[train_index], X.iloc[val_index]
-        print(X_train.head())
-        # print(f"HERE: {X.iloc[val_index].index[:5]}")#we see that the original data frame indices are maintained
         y_train, y_val = y.iloc[train_index], y.iloc[val_index]
+
         sample_weights = y_train.map(CLASS_WEIGHTS)
 
-
-        # X_train = scaler.fit_transform(X_train)
-        # X_val = scaler.transform(X_val)
-
         lgb_train = lgb.Dataset(X_train, label=y_train, weight=sample_weights)
-        lgb_valid = lgb.Dataset(X_test, label = y_test, reference = lgb_train)
-        ###lLGBM
-
-        params={
-            "objective":"binary",
-            "metric": ["auc", "binary_logloss"],
-            "boosting_type":"gbdt",
-            "learning_rate":0.05,
-            "num_leaves":31,
-            "max_depth":-1,
-            "feature_fraction":0.8,
-            "bagging_fraction":0.8,
-            "bagging_freq":5,
-            "lambda_l1":0.1,
-            "lambda_l2":0.2,
-            "min_data_in_leaf":20,
-            "verbose":-1
-            }
+        lgb_val_set = lgb.Dataset(X_val, label=y_val, reference=lgb_train)
 
         model = lgb.train(
-            params,
+            PARAMS,
             lgb_train,
             num_boost_round=1000,
-            valid_sets=[lgb_train,lgb_valid],
-            valid_names=["train","valid"],
-            callbacks=[lgb.early_stopping(50)]
+            valid_sets=[lgb_train, lgb_val_set],
+            valid_names=["train", "val"],
+            callbacks=[lgb.early_stopping(50)],
         )
-        
-        y_pred_prob=model.predict(X_test,num_iteration=model.best_iteration)
-        y_pred_prob_val = model.predict(X_val,num_iteration=model.best_iteration) #by getting the predictions for the validation set, 
-        #we can get the probabilities for each movie that were assigned to that movie from a model that did not see it, as opposed to just throwing them away.
-        # y_pred = y_pred_prob.argmax(axis=1)
-        print(f"MOST IMPORTANT FEATURE: {sorted(zip(model.feature_name(), model.feature_importance()), 
-             key=lambda x: x[1], reverse=True)}")
-        y_pred = (y_pred_prob >= 0.5).astype(int)
 
-        for original_ind, probs in zip(X_val.index, y_pred_prob_val):
-            rows.append({
-                'original_index': original_ind,
-                'prob_unreliable': probs
-            })
+        best_iters.append(model.best_iteration)
 
-        accuracy=accuracy_score(y_test,y_pred)
-        precision = precision_score(y_test, y_pred, average='macro')
-        recall = recall_score(y_test, y_pred, average='macro')
-        f1 = f1_score(y_test, y_pred, average='macro')
-        # auc = roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
+        # Evaluate on held-out Psycho test set
+        y_pred_prob = model.predict(X_test, num_iteration=model.best_iteration)
+        y_pred      = (y_pred_prob >= 0.5).astype(int)
 
-        print(y_train.value_counts())
-        print("Accuracy:",accuracy)
-        print("Precision:",precision)
-        print("Recall:",recall)
-        print("F1 Score:",f1)
-        # print("AUC:",auc)
-
-        print(f"--- Psycho test (fold {i}) ---")
+        print(f"Fold {i} — Psycho test set:")
         print(classification_report(y_test, y_pred))
+        print(f"  Best iteration: {model.best_iteration}")
+        print(f"  Feature importances: {sorted(zip(model.feature_name(), model.feature_importance()), key=lambda x: x[1], reverse=True)}")
 
+        # Store val predictions (out-of-fold, unseen by this fold's model)
+        y_pred_prob_val = model.predict(X_val, num_iteration=model.best_iteration)
+        for original_ind, prob in zip(X_val.index, y_pred_prob_val):
+            rows.append({'original_index': original_ind, 'prob_unreliable': prob})
 
-    #final model - get predictions for Psycho from on a model trained on all three training films
-    sample_weights = y.map(CLASS_WEIGHTS) #looking at the full dataset, not just per fold now
-    lgb_train_full = lgb.Dataset(X, label = y, weight = sample_weights)
+    mean_best_iter = int(np.mean(best_iters))
+    print(f"\nMean best iteration across folds: {mean_best_iter}")
+    return rows, mean_best_iter
+
+def train_final_model(X, y, num_boost_round):
+    sample_weights = y.map(CLASS_WEIGHTS)
+    lgb_train_full = lgb.Dataset(X, label=y, weight=sample_weights)
+
     model = lgb.train(
-            params,
-            lgb_train_full,
-            num_boost_round=1000
-        )
-    
-    psycho_y_pred_prob = model.predict(X_test, num_iteration = model.best_iteration)
+        PARAMS,
+        lgb_train_full,
+        num_boost_round=num_boost_round,
+    )
+    return model
 
-    print(psycho_y_pred_prob[:10])
-    print(y_test.values[:10])
-    
-    # psycho_y_pred = psycho_y_pred_prob.argmax(axis = 1)
-    psycho_y_pred = (psycho_y_pred_prob >= 0.5).astype(int)
-    for original_ind, probs in zip(X_test.index, psycho_y_pred_prob): #predicting Psycho's X values
-        rows.append({
-                'original_index': original_ind,
-                'prob_unreliable': probs
-            })
+def run_inference(model, data, rows):
+    """
+    Predict prob_unreliable for:
+      - annotated test rows (Psycho)
+      - unannotated rows for relevant joints (0-16) only
+    Appends results to rows and returns updated rows.
+    """
+    # Psycho test set (annotated)
+    test_data = data[
+        (data['film_id'].isin(TEST_FILM_IDS)) &
+        (data[TARGET].notna())
+    ]
+    X_test  = test_data[FEATURES]
+    y_test  = test_data[TARGET]
 
-    probs_df = pd.DataFrame(rows)
-    data = data.merge(probs_df, left_index=True, right_on='original_index', how='left')
+    psycho_probs = model.predict(X_test, num_iteration=model.best_iteration)
+    psycho_preds = (psycho_probs >= 0.5).astype(int)
 
-    accuracy=accuracy_score(y_test,psycho_y_pred)
-    precision = precision_score(y_test, psycho_y_pred, average='macro')
-    recall = recall_score(y_test, psycho_y_pred, average='macro')
-    f1 = f1_score(y_test, psycho_y_pred, average='macro')
-    # auc = roc_auc_score(y_test, y_pred_prob, multi_class='ovr')
+    print("\n--- Final model: Psycho test (all training films) ---")
+    print(classification_report(y_test, psycho_preds))
+    print(f"Accuracy:  {accuracy_score(y_test, psycho_preds):.3f}")
+    print(f"Precision: {precision_score(y_test, psycho_preds, average='macro'):.3f}")
+    print(f"Recall:    {recall_score(y_test, psycho_preds, average='macro'):.3f}")
+    print(f"F1:        {f1_score(y_test, psycho_preds, average='macro'):.3f}")
 
-    print("Accuracy:",accuracy)
-    print("Precision:",precision)
-    print("Recall:",recall)
-    print("F1 Score:",f1)
-    # print("AUC:",auc)
+    for original_ind, prob in zip(X_test.index, psycho_probs):
+        rows.append({'original_index': original_ind, 'prob_unreliable': prob})
 
-    print(f"--- Psycho test No Folding---")
-    print(classification_report(y_test, psycho_y_pred))
+    # Unannotated rows — restrict to relevant joints only
+    unannotated_mask = (
+        data[TARGET].isna() &
+        (data['joint_id'].isin(RELEVANT_JOINT_IDS))
+    )
+    X_unann = data.loc[unannotated_mask, FEATURES].copy()
+    X_unann = X_unann.fillna(-1)  # LightGBM handles -1 as missing natively
+    X_unann_valid = X_unann  # all rows are now valid
 
-    print(data['prob_trust'].isna().sum())
-    print(data[data['film'] == 'Psycho_319_1411']['prob_trust'].isna().sum())
+    if len(X_unann_valid) == 0:
+        print("WARNING: no valid unannotated rows to predict on.")
+        return rows
 
-    data.to_csv('../Feature_Engineering/Long_Data_with_probs.csv', index=False)
-    print("Saved.")
+    print(f"\nUnannotated rows eligible for inference: {unannotated_mask.sum()}")
+    print(f"  All rows will be predicted (NaNs filled with -1).")
 
-    import joblib
+    unann_probs = model.predict(X_unann_valid, num_iteration=model.best_iteration)
+    for original_ind, prob in zip(X_unann_valid.index, unann_probs):
+        rows.append({'original_index': original_ind, 'prob_unreliable': prob})
+
+    return rows
+
+def lightGBM_clf(csv_path, k=3):
+    data = load_and_prepare(csv_path)
+
+    annotated_mask = data[TARGET].notna()
+    train_data = data[data['film_id'].isin(TRAIN_FILM_IDS) & annotated_mask]
+    test_data  = data[
+        data['film_id'].isin(TEST_FILM_IDS) &
+        # data['joint_name'].isin(PSYCHO_JOINTS) &
+        annotated_mask
+    ]
+
+    print(f"Train rows: {len(train_data)}")
+    print(f"Test rows:  {len(test_data)}")
+    print(f"Test target distribution:\n{test_data[TARGET].value_counts()}\n")
+
+    X, y   = train_data[FEATURES], train_data[TARGET]
+    X_test = test_data[FEATURES]
+    y_test = test_data[TARGET]
+    groups = train_data['film']
+
+    # Cross-validation
+    rows, mean_best_iter = cross_validate(X, y, groups, X_test, y_test, k=k)
+
+    # Final model on all training data
+    model = train_final_model(X, y, num_boost_round=mean_best_iter)
+
+    # Inference on Psycho + unannotated
+    rows = run_inference(model, data, rows)
+
+    # Merge probabilities back into data
+    probs_df = pd.DataFrame(rows).set_index('original_index')
+    probs_df = probs_df[~probs_df.index.duplicated(keep='last')]  # Psycho appears in both cv and final
+    data['prob_unreliable'] = probs_df['prob_unreliable']
+
+    psycho_unann_body = data[
+        data['film_id'].isin(TEST_FILM_IDS) & 
+        data[TARGET].isna() & 
+        data['joint_id'].isin(RELEVANT_JOINT_IDS)
+    ]
+    print(f"Psycho unannotated body joints: {len(psycho_unann_body)}")
+    print(f"Of those, prob_unreliable null: {psycho_unann_body['prob_unreliable'].isna().sum()}")
+
+    print(f"\nprob_unreliable null count: {data['prob_unreliable'].isna().sum()}")
+    print(f"Psycho null count:          {data[data['film_id'].isin(TEST_FILM_IDS)]['prob_unreliable'].isna().sum()}")
+
+    data.to_csv('../Feature_Engineering/Long_Long_Data_with_probs.csv', index=False)
+    print("Saved to Feature_Engineering/Long_Long_Data_with_probs.csv")
 
     joblib.dump(model, 'lgbm_reliability_model.pkl')
     print("Model saved to lgbm_reliability_model.pkl")
 
-
-
-def main(df):
-    lightGBM_clf(df)
-
+def main(csv_path):
+    lightGBM_clf(csv_path)
     
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument("--csv", default = '../Feature_Engineering/Long Long Data.csv') ##default is Feature_Engineering/Long Data.csv
-
+    ap.add_argument("--csv", default='../Feature_Engineering/Concatenated_Data.csv')
+    ap.add_argument("--k",   type=int, default=3)
     args = ap.parse_args()
-    main(
-        args.csv
-    )
+    main(args.csv)
