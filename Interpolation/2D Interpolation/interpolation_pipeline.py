@@ -159,7 +159,7 @@ if __name__ == '__main__':
 
 #run as: 
 # python interpolation_pipeline.py \
-#   --json /path/to/Ramona_1_1639_pred_aggregated.json \
-#   --output /path/to/Ramona_1_1639_interpolated.json \
+#   --json '/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/Ramona_1_1639_pred_aggregated.json' \
+#   --output '/Users/emmavejcik/Desktop/DeepScreens/Interpolation/2D Interpolation/Outputs/Ramona_1_1639_interpolated.json' \
 #   --film Ramona_1_1639 \
 #   --threshold 0.5
