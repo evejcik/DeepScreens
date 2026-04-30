@@ -1,236 +1,165 @@
 import json
 import numpy as np
 import pandas as pd
-from scipy.interpolate import CubicSpline
+from pathlib import Path
+from kalman import apply_kalman_filter
+from cubic_spline import apply_cubic_spline
 
-VALIDITY_HORIZON    = 20
-UNRELIABLE_THRESHOLD = 0.5  # prob_unreliable > this -> flag as unreliable (1)
+UNRELIABLE_THRESHOLD = 0.5
+VALIDITY_HORIZON = 20
 
 H36M_JOINT_NAMES = {
-    0: 'root',       1: 'right_hip',    2: 'right_knee',  3: 'right_ankle',
-    4: 'left_hip',   5: 'left_knee',    6: 'left_ankle',  7: 'spine',
-    8: 'thorax',     9: 'neck_base',    10: 'head',
-    11: 'left_shoulder', 12: 'left_elbow',  13: 'left_wrist',
+    0: 'root',        1: 'right_hip',     2: 'right_knee',   3: 'right_ankle',
+    4: 'left_hip',    5: 'left_knee',     6: 'left_ankle',   7: 'spine',
+    8: 'thorax',      9: 'neck_base',     10: 'head',
+    11: 'left_shoulder', 12: 'left_elbow', 13: 'left_wrist',
     14: 'right_shoulder', 15: 'right_elbow', 16: 'right_wrist'
 }
 
-# ── JSON ↔ DataFrame conversion ───────────────────────────────────────────────
-
-def json_to_trajectories(instance_info: list, track_id: int) -> pd.DataFrame:
+def json_to_dataframe(data: dict, film: str, threshold: float) -> pd.DataFrame:
     """
-    Extract one track from instance_info into long-format DataFrame.
-    reliability_category_int: 0=reliable, 1=unreliable (prob_unreliable > threshold)
+    Deserialize cleaned 17-kp JSON into the long DataFrame format
+    expected by kalman.py and cubic_spline.py.
+
+    Derives reliability_category_int from prob_unreliable scores:
+        prob_unreliable > threshold  -> 2 (dont_trust)
+        prob_unreliable <= threshold -> 0 (trust)
+
+    No partial_trust (1) class is used — the Kalman R matrix should
+    be scaled continuously from prob_unreliable instead.
     """
     rows = []
-    for frame in instance_info:
-        frame_id = int(frame['frame_id'])
-        for instance in frame.get('instances', []):
-            if instance.get('track_id') != track_id:
-                continue
-            kp     = instance['keypoints']
-            scores = instance['keypoint_scores']  # prob_unreliable
+    for frame_entry in data['instance_info']:
+        frame_id = int(frame_entry['frame_id']) - 1  # JSON is 1-indexed
+        for instance_id, instance in enumerate(frame_entry.get('instances', [])):
+            kps    = instance['keypoints']           # list of [x, y], len 17
+            scores = instance['keypoint_scores']     # list of floats, len 17
             interp = instance.get('keypoint_interpolated', [False] * 17)
 
             for joint_id in range(17):
-                prob_unreliable = scores[joint_id]
-                rel = 1 if prob_unreliable > UNRELIABLE_THRESHOLD else 0
-
+                prob = scores[joint_id]
                 rows.append({
-                    'film':                    'json',
-                    'instance_id':             track_id,
+                    'film':                    film,
                     'frame_id':                frame_id,
+                    'instance_id':             instance_id,
                     'joint_id':                joint_id,
                     'joint_name':              H36M_JOINT_NAMES[joint_id],
-                    'x':                       float(kp[joint_id][0]),
-                    'y':                       float(kp[joint_id][1]),
-                    'prob_unreliable':         prob_unreliable,
-                    'reliability_category_int': rel,
-                    'keypoint_interpolated':   bool(interp[joint_id]),
-                    # backward_pass needs annotator_confidence —
-                    # substitute with prob_unreliable-based flag
-                    'annotator_confidence':    'certain' if prob_unreliable < 0.3
-                                               else 'fairly sure' if prob_unreliable < 0.5
-                                               else 'unsure',
+                    'x':                       kps[joint_id][0],
+                    'y':                       kps[joint_id][1],
+                    'prob_unreliable':         prob,
+                    'reliability_category_int': 1 if prob > threshold else 0,
+                    'already_interpolated':    interp[joint_id],
                 })
-    return pd.DataFrame(rows)
+
+    df = pd.DataFrame(rows)
+
+    # Compute velocity features — Kalman init uses these if present
+    df = df.sort_values(['film', 'instance_id', 'joint_id', 'frame_id'])
+    df['x_velocity'] = df.groupby(['film', 'instance_id', 'joint_id'])['x'].diff().fillna(0.0)
+    df['y_velocity'] = df.groupby(['film', 'instance_id', 'joint_id'])['y'].diff().fillna(0.0)
+
+    return df
 
 
-def trajectories_to_json(instance_info: list, track_id: int,
-                         traj_df: pd.DataFrame) -> list:
+def dataframe_to_json(data: dict, df: pd.DataFrame) -> dict:
     """
-    Write x_filled, y_filled back into instance_info for a given track.
-    Marks keypoint_interpolated=True for any joint that was filled.
+    Write x_filled, y_filled back into the JSON structure.
+    Updates keypoints, keypoint_scores (prob_unreliable unchanged),
+    and keypoint_interpolated (True where gap was filled).
     """
-    lookup = {}
-    for _, row in traj_df.iterrows():
-        x_out = row.get('x_filled', row['x'])
-        y_out = row.get('y_filled', row['y'])
-        was_filled = (
-            not pd.isna(x_out) and not pd.isna(y_out) and
-            (abs(x_out - row['x']) > 1e-6 or abs(y_out - row['y']) > 1e-6)
-        )
-        lookup[(int(row['frame_id']), int(row['joint_id']))] = {
-            'x':      float(x_out) if not pd.isna(x_out) else float(row['x']),
-            'y':      float(y_out) if not pd.isna(y_out) else float(row['y']),
-            'filled': bool(was_filled),
-        }
-    print(traj_df['joint_name'].unique())
-    reliable = traj_df[traj_df['reliability_category_int'] == 0]
-    print(reliable['joint_name'].value_counts())
-    updated = []
-    for frame in instance_info:
-        frame_id  = int(frame['frame_id'])
-        new_frame = dict(frame)
-        new_instances = []
+    # Build lookup: (frame_id, instance_id, joint_id) -> row
+    lookup = df.set_index(['frame_id', 'instance_id', 'joint_id'])
 
-        for instance in frame.get('instances', []):
-            new_inst = dict(instance)
-            if instance.get('track_id') == track_id:
-                new_kp     = [list(kp) for kp in instance['keypoints']]
-                new_interp = list(instance.get(
-                    'keypoint_interpolated', [False] * 17))
+    for frame_entry in data['instance_info']:
+        frame_id = int(frame_entry['frame_id']) - 1
+        for instance_id, instance in enumerate(frame_entry.get('instances', [])):
+            new_kps    = instance['keypoints'][:]
+            new_interp = instance.get('keypoint_interpolated', [False] * 17)[:]
 
-                for joint_id in range(17):
-                    key = (frame_id, joint_id)
-                    if key in lookup:
-                        entry = lookup[key]
-                        new_kp[joint_id] = [entry['x'], entry['y']]
-                        if entry['filled']:
-                            new_interp[joint_id] = True
+            for joint_id in range(17):
+                key = (frame_id, instance_id, joint_id)
+                if key not in lookup.index:
+                    continue
+                row = lookup.loc[key]
+                new_kps[joint_id]    = [float(row['x_filled']), float(row['y_filled'])]
+                # Mark as interpolated if it was flagged unreliable and got filled
+                if row['reliability_category_int'] == 1:
+                    new_interp[joint_id] = True
 
-                new_inst['keypoints']             = new_kp
-                new_inst['keypoint_interpolated'] = new_interp
-            new_instances.append(new_inst)
+            instance['keypoints']             = new_kps
+            instance['keypoint_interpolated'] = new_interp
+            # keypoint_scores (prob_unreliable) deliberately left unchanged
 
-        new_frame['instances'] = new_instances
-        updated.append(new_frame)
+    return data
 
-    return updated
 
-# ── Pipeline ──────────────────────────────────────────────────────────────────
-
-def apply_interpolation_pipeline(instance_info: list) -> list:
-    from kalman import apply_kalman_filter
-    from cubic_spline import apply_cubic_spline
-
-    track_ids = set()
-    for frame in instance_info:
-        for inst in frame.get('instances', []):
-            tid = inst.get('track_id')
-            if tid is not None and tid >= 0:
-                track_ids.add(tid)
-
-    total_tracks = len(track_ids)
-
-    for track_id in sorted(track_ids):
-        print(f"\nProcessing track {track_id}...")
-
-        traj_df = json_to_trajectories(instance_info, track_id)
-        if traj_df.empty:
-            print(f"  No data for track {track_id}, skipping.")
-            continue
-
-        traj_df = traj_df.sort_values(['joint_name', 'frame_id'])
-
-        print(f"  Applying Kalman filter...")
-        traj_df = apply_kalman_filter(traj_df)
-
-        print(f"  Applying cubic spline...")
-        traj_df = apply_cubic_spline(traj_df)
-
-        instance_info = trajectories_to_json(instance_info, track_id, traj_df)
-        print(f"  Track {track_id} done.")
-
-    print(f"\n{'='*50}")
-    print(f"INTERPOLATION SUMMARY")
-    print(f"{'='*50}")
-    print(f"  Total tracks processed: {total_tracks}")
-    print(f"  Backward pass: SKIPPED (insufficient annotation coverage)")
-    print(f"  Future work: re-enable when full joint annotation is available")
-    print(f"{'='*50}\n")
-
-    return instance_info
-
-def run_on_json(input_json_path: str, output_json_path: str):
-    with open(input_json_path, 'r') as f:
+def run_interpolation_pipeline(json_path: str, output_path: str, film: str,
+                                threshold: float = UNRELIABLE_THRESHOLD,
+                                validity_horizon: int = VALIDITY_HORIZON):
+    with open(json_path, 'r') as f:
         data = json.load(f)
 
-    print(f"Loaded {len(data['instance_info'])} frames.")
-    print(f"Threshold: prob_unreliable > {UNRELIABLE_THRESHOLD} -> flagged unreliable")
+    df = json_to_dataframe(data, film, threshold)
 
-    data['instance_info'] = apply_interpolation_pipeline(data['instance_info'])
+    print(f"Loaded {len(df)} joint-frame rows")
+    print(f"Unreliable (flagged): {(df['reliability_category_int'] == 1).sum()}")
+    print(f"Reliable:             {(df['reliability_category_int'] == 0).sum()}")
 
-    with open(output_json_path, 'w') as f:
+    # Verify joint ID space — catch COCO bleed-through immediately
+    id_check = df[['joint_name', 'joint_id']].drop_duplicates().sort_values('joint_id')
+    print("\nJoint ID verification:")
+    print(id_check.to_string(index=False))
+    assert df['joint_id'].max() == 16, "Joint IDs exceed H36M range — possible COCO bleed-through"
+
+    df = apply_kalman_filter(df)
+    df = apply_cubic_spline(df, validity_horizon=validity_horizon)
+
+    data = dataframe_to_json(data, df)
+
+    with open(output_path, 'w') as f:
         json.dump(data, f, indent='\t')
 
-    print(f"\nSaved to {output_json_path}")
+    print(f"\nWrote interpolated JSON to {output_path}")
+    return df
 
-    
+import argparse
 
-    with open('segment_1_1639_interpolated.json') as f:
-        data = json.load(f)
-
-    # Check how many joints were marked as interpolated
-    total_joints = 0
-    interpolated_joints = 0
-    for frame in data['instance_info']:
-        for inst in frame.get('instances', []):
-            interp = inst.get('keypoint_interpolated', [])
-            total_joints += len(interp)
-            interpolated_joints += sum(interp)
-
-    print(f"Total joint observations: {total_joints}")
-    print(f"Interpolated: {interpolated_joints} ({100*interpolated_joints/total_joints:.1f}%)")
-
-    inst = data['instance_info'][0]['instances'][0]
-    print('keypoint_scores length:', len(inst['keypoint_scores']))
-    print('sample scores:', inst['keypoint_scores'][:5])
-    print('keypoint_interpolated:', inst['keypoint_interpolated'][:5])
-
-
-with open('segment_1_1639_interpolated.json') as f:
-    data = json.load(f)
-
-from collections import defaultdict
-joint_interp = defaultdict(lambda: [0, 0])  # [interpolated, total]
-
-H36M_JOINT_NAMES = {
-    0:'root', 1:'right_hip', 2:'right_knee', 3:'right_ankle',
-    4:'left_hip', 5:'left_knee', 6:'left_ankle', 7:'spine',
-    8:'thorax', 9:'neck_base', 10:'head', 11:'left_shoulder',
-    12:'left_elbow', 13:'left_wrist', 14:'right_shoulder',
-    15:'right_elbow', 16:'right_wrist'
-}
-
-for frame in data['instance_info']:
-    for inst in frame.get('instances', []):
-        interp = inst.get('keypoint_interpolated', [])
-        scores = inst.get('keypoint_scores', [])
-        for jid in range(17):
-            name = H36M_JOINT_NAMES[jid]
-            joint_interp[name][1] += 1
-            if jid < len(interp) and interp[jid]:
-                joint_interp[name][0] += 1
-
-print(f"{'Joint':<20} {'Interpolated':>12} {'Total':>8} {'%':>8}")
-print('-' * 50)
-for jid in range(17):
-    name = H36M_JOINT_NAMES[jid]
-    n_interp, n_total = joint_interp[name]
-    print(f"{name:<20} {n_interp:>12} {n_total:>8} {100*n_interp/n_total:>7.1f}%")
-
-
-if __name__ == '__main__':
-    import argparse
+def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--input',  required=True,
-                    help='Path to cleaned 17-kp JSON (output of my_joints_to_json_17_kp.py)')
-    ap.add_argument('--output', required=True,
-                    help='Path to save interpolated JSON')
-    ap.add_argument('--threshold', type=float, default=0.5,
-                    help='prob_unreliable threshold (default 0.5)')
+    ap.add_argument('--json',        required=True,  help='Path to cleaned 17-kp JSON')
+    ap.add_argument('--output',      required=True,  help='Path for interpolated output JSON')
+    ap.add_argument('--film',        required=True,  help='Film name key (must match CSV film column)')
+    ap.add_argument('--threshold',   type=float, default=0.5,
+                    help='prob_unreliable threshold above which a joint is flagged (default 0.5)')
+    ap.add_argument('--horizon',     type=int,   default=VALIDITY_HORIZON,
+                    help='Max gap size in frames for cubic spline (default 20)')
     args = ap.parse_args()
 
-    UNRELIABLE_THRESHOLD = args.threshold
-    run_on_json(args.input, args.output)
-    
+    df = run_interpolation_pipeline(
+        json_path       = args.json,
+        output_path     = args.output,
+        film            = args.film,
+        threshold       = args.threshold,
+        validity_horizon = args.horizon,
+    )
+
+    # Summary of what was actually interpolated
+    if 'x_filled' in df.columns:
+        flagged   = df['reliability_category_int'] == 1
+        print(f"\nFlagged as unreliable: {flagged.sum()} joint-frames")
+        changed = flagged & (
+            ((df['x_filled'] - df['x']).abs() > 1e-6) |
+            ((df['y_filled'] - df['y']).abs() > 1e-6)
+        )
+        print(f"Actually interpolated (coordinates changed): {changed.sum()} joint-frames")
+        print(f"Left unchanged (no valid anchors / gap too large): {(flagged & ~changed).sum()} joint-frames")
+
+if __name__ == '__main__':
+    main()
+
+#run as: 
+# python interpolation_pipeline.py \
+#   --json /path/to/Ramona_1_1639_pred_aggregated.json \
+#   --output /path/to/Ramona_1_1639_interpolated.json \
+#   --film Ramona_1_1639 \
+#   --threshold 0.5

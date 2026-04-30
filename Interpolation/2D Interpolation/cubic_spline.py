@@ -27,17 +27,17 @@ def apply_cubic_spline_to_group(group_df, validity_horizon=VALIDITY_HORIZON):
     n        = len(group_df)
 
     # Boolean mask of anchor frames (trust or partial_trust)
-    is_anchor = np.isin(rel, [0, 1])
+    is_anchor = rel == 0
 
     # Walk through and find dont_trust runs
     i = 0
     while i < n:
-        if rel[i] != 0:  # start of a dont_trust run
+        if rel[i] == 1:  # start of a dont_trust run
             gap_start = i
 
             # Find end of this run
             j = i
-            while j < n and rel[j] !=0:
+            while j < n and rel[j] == 1:
                 j += 1
             gap_end = j - 1  # last dont_trust frame index (inclusive)
 

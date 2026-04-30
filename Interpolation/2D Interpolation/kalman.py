@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from kalman import KalmanFilter
+# from kalman import KalmanFilter
 
 #Source: https://www.geeksforgeeks.org/python/kalman-filter-in-python/
 
@@ -27,8 +27,6 @@ class KalmanFilter:
         I = np.eye(self.P.shape[0])
         self.P = np.dot(I - np.dot(K, self.H), self.P)
         return self.x
-
-
 
 
 dt = 1.0
