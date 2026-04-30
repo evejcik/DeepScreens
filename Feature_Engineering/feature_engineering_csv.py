@@ -122,13 +122,13 @@ def clean_nans(df):
 
     return df
 
-def joint_mapping(df):
+# def joint_mapping(df):
 
-    df["joint_id"] = df["joint_name"].map(RTMW_TO_H36M_ID)  # NaN for unmapped
-    unmapped = df[df["joint_id"].isna()]["joint_name"].unique()
-    if len(unmapped):
-        print(f"Warning: unmapped joints: {unmapped}")
-    return df
+#     df["joint_id"] = df["joint_name"].map(RTMW_TO_H36M_ID)  # NaN for unmapped
+#     unmapped = df[df["joint_id"].isna()]["joint_name"].unique()
+#     if len(unmapped):
+#         print(f"Warning: unmapped joints: {unmapped}")
+#     return df
 
 def build_model_input(df: pd.DataFrame, required_joints: int = 12) -> dict:
     """
@@ -161,7 +161,7 @@ def data_loader(csv_path):
 
     df = reliability_int(df)
 
-    df = joint_mapping(df)
+    # df = joint_mapping(df)
 
     df = is_valid(df)
 

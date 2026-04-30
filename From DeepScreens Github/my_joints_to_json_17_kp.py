@@ -24,6 +24,24 @@ import argparse
 #     # and path to output for save
 #     df = pd.read_csv(my_df)
 
+COCO_TO_H36M = {
+    11: 4,   # left_hip
+    12: 1,   # right_hip
+    13: 5,   # left_knee
+    14: 2,   # right_knee
+    15: 6,   # left_ankle
+    16: 3,   # right_ankle
+    5:  11,  # left_shoulder
+    6:  14,  # right_shoulder
+    7:  12,  # left_elbow
+    8:  15,  # right_elbow
+    9:  13,  # left_wrist
+    10: 16,  # right_wrist
+    0:  10,  # nose -> head
+    3:  10,  # left_ear -> head
+    4:  10,  # right_ear -> head
+}
+
 def convert_rtmpose133_to_h36m17_2d(coco_keypoints):
     """Convert 133 RTMW keypoints to 17 H36M keypoints (2D version)."""
     h36m_keypoints = np.zeros((17, 2), dtype=np.float32)
@@ -142,74 +160,108 @@ def geometric_mean(scores: list) -> float:
 
     return float(geometric_mean_value)
 
+def get_prob(lookup, frame_id, instance_id, h36m_id):
+    entry = lookup.get((frame_id, instance_id, h36m_id))
+    return entry['prob_unreliable'] if entry is not None else None
 
 def build_cleaned_json_per_film(original_json_path, df, output_path, film):
     with open(original_json_path, 'r') as f:
         data = json.load(f)
-        # print("1")
-        df = df[df['film'] == film]
 
-        lookup = {}
-        for ind, row in df.iterrows():
-            # print("2")
-            key = (row['frame_id'], row['instance_id'], row['joint_id'])
-            lookup[key] = {
-                'x' : row['x'],
-                'y' : row['y'],
-                'prob_unreliable' : row['prob_unreliable'],
-                'interpolated' : False
-            }
-        
-        for frame in data['instance_info']:
-            # print(3)
-            # print("HERE")
-            frame_id = int(frame['frame_id']) - 1
-            frame_map = {}
-            for instance_id, instance in enumerate(frame.get('instances', [])):
-    
-                # Step 1: convert original 133 COCO keypoints to 17 H36M baseline
-                original_133 = np.array(instance['keypoints'])  # (133, 2)
-                if original_133.ndim == 3:
-                    original_133 = original_133.squeeze(0)       # handle (1,133,2)
-                
-                h36m_17 = convert_rtmpose133_to_h36m17_2d(original_133)  # (17, 2)
-                
-                # Step 2: get original scores, remap to 17
-                original_scores_133 = np.array(instance['keypoint_scores']).flatten()
-                scores_17 = remap_keypoint_scores_133_to_17(original_scores_133)
-                
-                # Step 3: build new lists from H36M baseline
-                new_keypoints    = h36m_17.tolist()
-                new_scores       = list(scores_17)
-                new_interpolated = [False] * 17
+    df = df[df['film'] == film]
 
-                # Step 4: overwrite with cleaned values where available
-                for joint_id_h36m in range(17):
-                    key = (frame_id, instance_id, joint_id_h36m)
-                    if key in lookup:
-                        entry = lookup[key]
-                        new_keypoints[joint_id_h36m]    = [entry['x'], entry['y']]
-                        new_scores[joint_id_h36m]       = entry['prob_unreliable']
-                        new_interpolated[joint_id_h36m] = entry['interpolated']
+    # verify frame_id alignment
+    print(f"CSV frame_id sample: {df['frame_id'].head(3).tolist()}")
+    print(f"JSON first frame_id (raw): {data['instance_info'][0]['frame_id']}")
+    print(f"JSON first frame_id (after -1): {int(data['instance_info'][0]['frame_id']) - 1}")
 
-                instance['keypoints']             = new_keypoints
-                instance['keypoint_scores']       = new_scores
-                instance['keypoint_interpolated'] = new_interpolated
-            # print(6)
-        with open(output_path, 'w') as f:
-            json.dump(data, f, indent='\t')
+    # build lookup with H36M joint_ids as keys
+    lookup = {}
+    for ind, row in df.iterrows():
+        coco_id = int(row['joint_id'])
+        h36m_id = COCO_TO_H36M.get(coco_id)
+        if h36m_id is None:
+            continue
+        key = (row['frame_id'], row['instance_id'], h36m_id)
+        lookup[key] = {
+            'x':               row['x'],
+            'y':               row['y'],
+            'prob_unreliable': row['prob_unreliable'],
+            'interpolated':    False
+        }
 
-        # after saving
-        with open(output_path, 'r') as f:
-            result = json.load(f)
+    for frame in data['instance_info']:
+        frame_id = int(frame['frame_id']) - 1
 
-        inst = result['instance_info'][0]['instances'][0]
-        print(inst.keys())
-        print(inst['keypoint_interpolated'][:5])
-        print(inst['keypoint_scores'][:5])
-        print(inst['keypoints'][:5])
-        print(result['instance_info'][0]['instances'][0]['keypoint_scores'][0])
-        print(result['instance_info'][0]['instances'][0]['bbox'])
+        for instance_id, instance in enumerate(frame.get('instances', [])):
+
+            # Step 1: convert original 133 COCO keypoints to 17 H36M baseline
+            original_133 = np.array(instance['keypoints'])
+            if original_133.ndim == 3:
+                original_133 = original_133.squeeze(0)
+
+            h36m_17 = convert_rtmpose133_to_h36m17_2d(original_133)
+
+            # Step 2: get original scores, remap to 17
+            original_scores_133 = np.array(instance['keypoint_scores']).flatten()
+            scores_17 = remap_keypoint_scores_133_to_17(original_scores_133)
+
+            # Step 3: build new lists from H36M baseline
+            new_keypoints    = h36m_17.tolist()
+            new_scores       = list(scores_17)
+            new_interpolated = [False] * 17
+
+            # Step 3b: propagate reliability to computed H36M joints
+            l_hip_prob = get_prob(lookup, frame_id, instance_id, 4)
+            r_hip_prob = get_prob(lookup, frame_id, instance_id, 1)
+            l_sho_prob = get_prob(lookup, frame_id, instance_id, 11)
+            r_sho_prob = get_prob(lookup, frame_id, instance_id, 14)
+
+            if l_hip_prob is not None and r_hip_prob is not None:
+                new_scores[0] = geometric_mean([l_hip_prob, r_hip_prob])   # root
+
+            torso_probs = [p for p in [l_hip_prob, r_hip_prob, l_sho_prob, r_sho_prob]
+                           if p is not None]
+            if torso_probs:
+                new_scores[7] = geometric_mean(torso_probs)  # spine
+                new_scores[8] = geometric_mean(torso_probs)  # thorax
+
+            if l_sho_prob is not None and r_sho_prob is not None:
+                new_scores[9] = geometric_mean([l_sho_prob, r_sho_prob])   # neck_base
+
+            head_prob = get_prob(lookup, frame_id, instance_id, 10)
+            if head_prob is not None:
+                new_scores[10] = head_prob
+
+            # Step 4: overwrite direct joints with cleaned values where available
+            for joint_id_h36m in range(17):
+                key = (frame_id, instance_id, joint_id_h36m)
+                if key in lookup:
+                    entry = lookup[key]
+                    new_keypoints[joint_id_h36m]    = [entry['x'], entry['y']]
+                    new_scores[joint_id_h36m]       = entry['prob_unreliable']
+                    new_interpolated[joint_id_h36m] = entry['interpolated']
+
+            instance['keypoints']             = new_keypoints
+            instance['keypoint_scores']       = new_scores
+            instance['keypoint_interpolated'] = new_interpolated
+
+    with open(output_path, 'w') as f:
+        json.dump(data, f, indent='\t')
+
+    # validation
+    with open(output_path, 'r') as f:
+        result = json.load(f)
+
+    inst = result['instance_info'][0]['instances'][0]
+    assert len(inst['keypoints']) == 17, f"Expected 17 keypoints, got {len(inst['keypoints'])}"
+    assert len(inst['keypoint_scores']) == 17
+    assert len(inst['keypoint_interpolated']) == 17
+    assert all(isinstance(v, bool) for v in inst['keypoint_interpolated'])
+    print(f"Validation passed. Sample scores: {inst['keypoint_scores'][:5]}")
+    print(f"Sample keypoints: {inst['keypoints'][:3]}")
+    print(f"Sample interpolated: {inst['keypoint_interpolated'][:5]}")
+
 
 
 def probs_distribs(df):
@@ -241,8 +293,8 @@ def probs_distribs(df):
         print(f"    Unreliable:        {n_unrel}  ({100*n_unrel/total:.1f}%)")
 
         # --- Overall distribution ---
-        p = film_df['prob_trust']
-        print(f"\n  Overall prob_trust distribution:")
+        p = film_df['prob_unreliable']
+        print(f"\n  Overall prob_unreliable distribution:")
         print(f"    Mean:   {p.mean():.4f}")
         print(f"    Median: {p.median():.4f}")
         print(f"    Std:    {p.std():.4f}")
@@ -268,8 +320,8 @@ def probs_distribs(df):
             ('75th pct', lambda x: x.quantile(0.75)),
             ('90th pct', lambda x: x.quantile(0.90)),
         ]:
-            r_val  = func(film_rel['prob_trust'])  if len(film_rel)  > 0 else float('nan')
-            u_val  = func(film_unrel['prob_trust']) if len(film_unrel) > 0 else float('nan')
+            r_val  = func(film_rel['prob_unreliable'])  if len(film_rel)  > 0 else float('nan')
+            u_val  = func(film_unrel['prob_unreliable']) if len(film_unrel) > 0 else float('nan')
             print(f"    {metric:<18} {r_val:>12.4f} {u_val:>12.4f}")
 
         # --- Threshold analysis ---
@@ -277,8 +329,8 @@ def probs_distribs(df):
         print(f"    {'Threshold':<12} {'TP rate':>10} {'FP rate':>10} {'Precision':>10} {'F1':>8}")
         print(f"    {'-'*54}")
         for thresh in [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
-            # Predicted unreliable = prob_trust < threshold
-            pred_unrel = film_df['prob_trust'] > thresh
+
+            pred_unrel = film_df['prob_unreliable'] > thresh
             actual_unrel = film_df['reliability_category_int'] == 1
 
             tp = (pred_unrel & actual_unrel).sum()
@@ -293,7 +345,7 @@ def probs_distribs(df):
             print(f"    {thresh:<12.1f} {tpr:>10.4f} {fpr:>10.4f} {precision:>10.4f} {f1:>8.4f}")
 
         # --- Per joint breakdown ---
-        print(f"\n  Per-joint mean prob_trust (reliable vs unreliable):")
+        print(f"\n  Per-joint mean prob_unreliable (reliable vs unreliable):")
         print(f"    {'Joint ID':<10} {'Joint name':<20} {'Rel mean':>10} {'Unrel mean':>12} {'Separation':>12}")
         print(f"    {'-'*66}")
 
@@ -306,8 +358,8 @@ def probs_distribs(df):
         }
 
         for jid in range(17):
-            j_rel   = film_rel[film_rel['joint_id'] == jid]['prob_trust']
-            j_unrel = film_unrel[film_unrel['joint_id'] == jid]['prob_trust']
+            j_rel   = film_rel[film_rel['joint_id'] == jid]['prob_unreliable']
+            j_unrel = film_unrel[film_unrel['joint_id'] == jid]['prob_unreliable']
             if len(j_rel) == 0 and len(j_unrel) == 0:
                 continue
             r_mean  = j_rel.mean()   if len(j_rel)   > 0 else float('nan')
@@ -327,13 +379,13 @@ def probs_distribs(df):
 
 def main(film, json, csv, output_path):
     df = pd.read_csv(csv)
-    # for film in df['film'].unique():
-    # film = 'Moonlight_1_1529'
     build_cleaned_json_per_film(json, df, output_path, film)
-    probs_distribs(df)
-    print(df.columns.tolist())
-    print(df['reliability_category_int'].value_counts() if 'reliability_category_int' in df.columns else "column missing")
-    print("Done!")
+    
+    annotated_only = df[df['reliability_category_int'].notna()]
+    if len(annotated_only) > 0:
+        probs_distribs(annotated_only)
+    else:
+        print("No annotated rows — skipping probs_distribs.")
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -347,7 +399,7 @@ if __name__ == "__main__":
         film = 'Ramona_1_1639',
         # '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/emma_clip_results_2/Moonlight_2016/Moonlight_2016/segment_1_1529.json',
         json = '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/ramona-demo-clip 1_1369/segment_1_1639.json',
-        csv = '/Users/emmavejcik/Desktop/DeepScreens/Feature_Engineering/Long_Data_with_probs.csv',
-        output_path = f'/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/{film}_pred_aggregated.json'
+        csv = '/Users/emmavejcik/Desktop/DeepScreens/Feature_Engineering/Long_Long_Data_with_probs.csv',
+        output_path = '/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/Ramona_1_1639_pred_aggregated.json'
     )
 

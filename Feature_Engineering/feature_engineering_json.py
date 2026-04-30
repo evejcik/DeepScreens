@@ -69,12 +69,15 @@ def json_to_csv(json, film: str):
             confs = instance.get('keypoint_scores', [])
 
             geom_results = compute_plausibility_for_instance(kps, confs)
+            # mmpose_confidence = 
 
             for joint_id, keypoint in enumerate(kps):
                 joint_name = keypoint_id2name.get(str(joint_id))
 
                 x = keypoint[0]
                 y = keypoint[1]
+
+                mmpose_confidence = confs[joint_id] if joint_id < len(confs) else -1
 
                 geom = geom_results.get(joint_id, {})
                 geom_plausible = geom.get('geom_plausible', None)
@@ -83,7 +86,6 @@ def json_to_csv(json, film: str):
                 bone_ratio     = geom.get('bone_ratio', None)
 
                 track_id = -1
-                mmpose_confidence = -1
 
                 position_mean_x_wk = -1
                 position_mean_y_wk = -1
@@ -138,6 +140,14 @@ def frame_width_height(json):
     video_width = video_shape[0]
     video_height = video_shape[1]
     return video_width, video_height
+
+def joint_mapping(df):
+
+    df["joint_id"] = df["joint_name"].map(RTMW_TO_H36M_ID)  # NaN for unmapped
+    unmapped = df[df["joint_id"].isna()]["joint_name"].unique()
+    if len(unmapped):
+        print(f"Warning: unmapped joints: {unmapped}")
+    return df
 
 def confidence_mean_rolling(df, k):
     #we want by: film, instance, frame, joint
@@ -351,7 +361,8 @@ def main(json, film, annotated_csv, k):
                                 ]
                         )
     # df = confidence_mean_rolling(df, k)
-    # df = confidence_std_rolling(df, k)
+    df = confidence_std_rolling(df, k)
+    # df = joint_mapping(df) #take original raw 133COCO data and convert to H36M data to match up with feature_engineering_csv.py
     df = position_mean_rolling(df, k)
     df = position_std_rolling(df,k)
     df = position_velocity(df)

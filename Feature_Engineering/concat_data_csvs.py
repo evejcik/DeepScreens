@@ -2,14 +2,18 @@ import pandas as pd
 import numpy as np
 
 annotated_data = pd.read_csv("Long Data.csv")
-unannotated_data = pd.read_csv("Long Long Data.csv")
+
+pd.read_csv('Long Data.csv')['joint_name'].value_counts()
+unannotated_data = pd.read_csv("Long Long Data.csv", low_memory=False)
+
+# reason_for_distrust: -1 sentinel -> NaN so it matches annotated object column
+unannotated_data['reason_for_distrust'] = unannotated_data['reason_for_distrust'].replace(-1, np.nan).astype(object)
+
 annotated_data_with_probs = pd.read_csv("Long_Data_with_probs.csv")
 
 # geom_plausible: cast to nullable boolean to match annotated float64 (which encodes True/False/NaN)
 unannotated_data['geom_plausible'] = pd.to_numeric(unannotated_data['geom_plausible'], errors='coerce')
 
-# reason_for_distrust: -1 sentinel -> NaN so it matches annotated object column
-unannotated_data['reason_for_distrust'] = unannotated_data['reason_for_distrust'].replace(-1, np.nan)
 
 # same for other sentinel-filled columns that should be NaN when unannotated
 sentinel_cols = ['annotator_confidence', 'mmpose_confidence', 'reliability_category_int',
