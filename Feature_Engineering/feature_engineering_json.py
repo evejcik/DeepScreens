@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import json
 import csv
 from geometric_plausibility import compute_plausibility_for_instance, compute_boundary_distance
+from geometric_plausibility import recompute_geom
 
 
 RTMW_TO_H36M_ID = {
@@ -50,6 +51,15 @@ H36M_JOINT_NAMES = {
 #i think, get this from when we stack all of the csvs together
 # }
 
+FILM_TO_JSON_PATHS = {
+    'Moonlight_1_1529': '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_1_1529.json',
+    'Ramona_1_1639':    '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_1_1639.json',
+    'Tron_2059_2148':   '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_2059_2148.json',
+    'Tron_3067_3132':   '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_3067_3132.json',
+    'Psycho_319_1411':  '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_319_1411.json',
+    'Psycho_319_2006':  '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_319_2006.json',
+}
+
 def load_json(path: str) -> dict:
     with open(path, "r") as fh:
         return json.load(fh)
@@ -80,10 +90,13 @@ def json_to_csv(json, film: str):
                 mmpose_confidence = confs[joint_id] if joint_id < len(confs) else -1
 
                 geom = geom_results.get(joint_id, {})
-                geom_plausible = geom.get('geom_plausible', None)
-                geom_flag      = geom.get('geom_flag', 'not_checked')
-                bone_length    = geom.get('bone_length', None)
-                bone_ratio     = geom.get('bone_ratio', None)
+                gp_raw = geom.get('geom_plausible', None)
+                geom_plausible = (1 if gp_raw is True
+                                else 0 if gp_raw is False
+                                else -1)
+                geom_flag   = geom.get('geom_flag') or 'not_checked'
+                bone_length = geom.get('bone_length') if geom.get('bone_length') is not None else -1
+                bone_ratio  = geom.get('bone_ratio')  if geom.get('bone_ratio')  is not None else -1
 
                 track_id = -1
 
@@ -316,6 +329,45 @@ def film_int_encoding(csv_annotated, df):
 
     return df
 
+
+COCO_TO_H36M_DIRECT = {
+    12: 1,   # right_hip
+    14: 2,   # right_knee
+    16: 3,   # right_ankle
+    11: 4,   # left_hip
+    13: 5,   # left_knee
+    15: 6,   # left_ankle
+    5:  11,  # left_shoulder
+    7:  12,  # left_elbow
+    9:  13,  # left_wrist
+    6:  14,  # right_shoulder
+    8:  15,  # right_elbow
+    10: 16,  # right_wrist
+}
+
+def remap_to_h36m(df):
+
+    # df = pd.read_csv("Long Long Data.csv", low_memory=False)
+    print(f"Before filtering: {len(df)} rows, {df['joint_id'].nunique()} unique joint_ids")
+
+    # Keep only rows where joint_id is in COCO_TO_H36M_DIRECT
+    df = df[df['joint_id'].isin(COCO_TO_H36M_DIRECT.keys())].copy()
+
+    # Remap
+    df['joint_id'] = df['joint_id'].map(COCO_TO_H36M_DIRECT)
+
+    # Update joint_name to match the H36M convention to avoid downstream confusion
+    H36M_ID_TO_NAME = {v: k for k, v in {
+        'right_hip': 1, 'right_knee': 2, 'right_ankle': 3,
+        'left_hip': 4, 'left_knee': 5, 'left_ankle': 6,
+        'left_shoulder': 11, 'left_elbow': 12, 'left_wrist': 13,
+        'right_shoulder': 14, 'right_elbow': 15, 'right_wrist': 16,
+    }.items()}
+    df['joint_name'] = df['joint_id'].map(H36M_ID_TO_NAME)
+
+    print(f"After filtering: {len(df)} rows, {df['joint_id'].nunique()} unique joint_ids")
+    return df
+
 def main(json, film, annotated_csv, k):
     output_path = 'Long Long Data.csv'
     
@@ -372,7 +424,7 @@ def main(json, film, annotated_csv, k):
     # df = frames_since_dont_trust(df)
     # df = window_fractions(df)
     df = film_int_encoding(annotated_csv, df)
-
+    df = remap_to_h36m(df)
     df = df.drop(columns = [
                             'joint_name.1', 
                             'valid instance bbox', 
@@ -392,16 +444,24 @@ def main(json, film, annotated_csv, k):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--json") 
-    ap.add_argument("--film")
-    ap.add_argument("--annotated_csv", default = "Long Data.csv")
-    ap.add_argument("--k", type = int, default = 5)
-
-
+    ap.add_argument("--annotated_csv", default="Long Data.csv")
+    ap.add_argument("--k", type=int, default=5)
+    ap.add_argument("--fresh", action="store_true",
+                    help="Delete Long Long Data.csv before processing.")
     args = ap.parse_args()
-    main(
-        args.json,
-        args.film,
-        args.annotated_csv,
-        args.k
-    )
+
+    output_path = "Long Long Data.csv"
+    if args.fresh and os.path.isfile(output_path):
+        os.remove(output_path)
+        print(f"[setup] Removed existing {output_path}")
+
+    for film, json_path in FILM_TO_JSON_PATHS.items():
+        if not os.path.isfile(json_path):
+            print(f"[skip] {film}: JSON not found at {json_path}")
+            continue
+        print(f"\n{'='*60}")
+        print(f"Processing {film}")
+        print(f"{'='*60}")
+        main(json_path, film, args.annotated_csv, args.k)
+
+    print("\nAll films processed.")

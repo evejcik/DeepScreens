@@ -11,7 +11,7 @@ import glob
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-#1. encode reliability category as integer: trust = 0, partial trust = 1, don't trust = 2
+#1. encode reliability category as integer: trust = 0, don't trust = 2
 #2. encode joint_name as integer (0 - 16), using H36M mapping from mmpose
 #3. handle missing values for 'valid' -> 0 if 0 else 1
 #4. sort films by (film, instance_id, joint_name) -> make sure to not mix joints or tracks when computing temporal windows!
@@ -25,6 +25,26 @@ import matplotlib.pyplot as plt
     #g. frames_since_trust
 
 
+# Usage
+# -----
+from geometric_plausibility import recompute_geom
+
+# df now has fresh geom_plausible, geom_flag, bone_length, bone_ratio columns
+ 
+# FILM_TO_JSON_PATHS is a dict mapping film_name -> absolute path to that
+# film's raw 133-kp JSON. For example:
+ 
+FILM_TO_JSON_PATHS = {
+    'Moonlight_1_1529': '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_1_1529.json',
+    'Ramona_1_1639':    '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_1_1639.json',
+    'Tron_2059_2148':   '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_2059_2148.json',
+    'Tron_3067_3132':   '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_3067_3132.json',
+    'Psycho_319_1411':  '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_319_1411.json',
+    'Psycho_319_2006':  '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_319_2006.json',
+}
+
+
+# """
 RTMW_TO_H36M_ID = {
     "right_hip":       1,
     "right_knee":      2,
@@ -50,6 +70,31 @@ RTMW_NAME2SRC_ID = {
     "left_hip": 11, "right_hip": 12,
     "left_knee": 13, "right_knee": 14,
     "left_ankle": 15, "right_ankle": 16,
+}
+
+H36M_NAME_TO_ID = {
+    'root': 0,
+    'right_hip': 1, 'right_knee': 2, 'right_ankle': 3,
+    'left_hip': 4, 'left_knee': 5, 'left_ankle': 6,
+    'spine': 7, 'thorax': 8, 'neck_base': 9, 'head': 10,
+    'left_shoulder': 11, 'left_elbow': 12, 'left_wrist': 13,
+    'right_shoulder': 14, 'right_elbow': 15, 'right_wrist': 16,
+}
+
+
+H36M_TO_COCO = {
+    1:  12,   # right_hip
+    2:  14,   # right_knee
+    3:  16,   # right_ankle
+    4:  11,   # left_hip
+    5:  13,   # left_knee
+    6:  15,   # left_ankle
+    11: 5,    # left_shoulder
+    12: 7,    # left_elbow
+    13: 9,    # left_wrist
+    14: 6,    # right_shoulder
+    15: 8,    # right_elbow
+    16: 10,   # right_wrist
 }
 
 def csv_stack(path_to_csvs: str) -> pd.DataFrame:
@@ -122,6 +167,13 @@ def clean_nans(df):
 
     return df
 
+def replace_incorrect_values(df):
+    df['reason_for_distrust'].replace('clearly_wrong','wrong')
+    df['reliability_category'].replace('partial trust', "don't trust")
+    df['reliability_category'].replace('ambiguous', "don't trust")
+    df['dist_to_boundary'].replace('c', "")
+    return df
+
 # def joint_mapping(df):
 
 #     df["joint_id"] = df["joint_name"].map(RTMW_TO_H36M_ID)  # NaN for unmapped
@@ -129,6 +181,39 @@ def clean_nans(df):
 #     if len(unmapped):
 #         print(f"Warning: unmapped joints: {unmapped}")
 #     return df
+
+def normalize_joint_ids(df):
+    """
+    Force joint_id to H36M space derived from joint_name.
+    Old annotated CSVs may have COCO joint_ids; this overwrites them.
+    Rows with unknown joint_name (NaN, typos) get joint_id=NaN.
+    """
+    n_before = df['joint_id'].notna().sum()
+    df['joint_id'] = df['joint_name'].map(H36M_NAME_TO_ID)
+    n_after = df['joint_id'].notna().sum()
+    n_unmapped = n_before - n_after
+    if n_unmapped:
+        unmapped_names = df[df['joint_id'].isna()]['joint_name'].unique()
+        print(f"[normalize_joint_ids] WARNING: {n_unmapped} rows have "
+              f"unmappable joint_name values: {unmapped_names}")
+    return df
+
+def normalize_joint_names(df):
+    """
+    Map alternative joint names from the annotator UI to canonical H36M names.
+    Some annotation sessions used 'foot' as a visual label for the ankle joint;
+    these are the same anatomical position, just different vocabulary.
+    """
+    NAME_ALIASES = {
+        'left_foot':  'left_ankle',
+        'right_foot': 'right_ankle',
+    }
+    n_renamed = df['joint_name'].isin(NAME_ALIASES).sum()
+    df['joint_name'] = df['joint_name'].replace(NAME_ALIASES)
+    if n_renamed:
+        print(f"[normalize_joint_names] Renamed {n_renamed} rows: "
+              f"foot -> ankle aliases applied.")
+    return df
 
 def build_model_input(df: pd.DataFrame, required_joints: int = 12) -> dict:
     """
@@ -426,13 +511,16 @@ def extract_features_from_json(json_path: str, film_name: str) -> pd.DataFrame:
     return df
 def main(csv,k):
     df = data_loader(csv)
-
+    df = normalize_joint_names(df)
+    df = replace_incorrect_values(df)
+    df = normalize_joint_ids(df)
     df = confidence_mean_rolling(df, k)
     df = confidence_std_rolling(df, k)
     df = position_mean_rolling(df, k)
     df = position_std_rolling(df,k)
     df = position_velocity(df)
     df = position_acceleration(df)
+    df = recompute_geom(df, FILM_TO_JSON_PATHS)
     df = frames_since_trust(df)
     df = frames_since_dont_trust(df)
     df = window_fractions(df)
@@ -451,45 +539,11 @@ def main(csv,k):
     df = clean_nans(df)
     data_checking(df)
     df.to_csv('Long Data.csv', index = False)
-    # print("Final Data saved.")
-
-
-# def main_unannotated(csv,k):
-#     df = data_loader(csv)
-
-#     df = confidence_mean_rolling(df, k)
-#     df = confidence_std_rolling(df, k)
-#     df = position_mean_rolling(df, k)
-#     df = position_std_rolling(df,k)
-#     df = position_velocity(df)
-#     df = position_acceleration(df)
-#     # df = frames_since_trust(df)
-#     # df = frames_since_dont_trust(df)
-#     # df = window_fractions(df)
-#     df = film_int_encoding(df)
-
-
-#     df = df.drop(columns = [
-#                             'joint_name.1', 
-#                             'valid instance bbox', 
-#                             'reliability_category', 
-#                             'confidence_mean_wk',
-#                             'x_velocity',
-#                             'y_velocity'
-#                             ], errors = 'ignore')
-
-#     df = clean_nans(df)
-#     data_checking(df)
-#     df.to_csv('Long Long Data.csv', index = False)
-#     print("Final Data saved.")
-
-    
-
-
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", default = "../ANNOTATED_CSVS") 
+    # ap.add_argument("--csv", default = '../NEW_ANNOTATED_CSVS')
     ap.add_argument("--k", type = int, default = 5)
 
 
