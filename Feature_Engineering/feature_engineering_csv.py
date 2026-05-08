@@ -317,6 +317,25 @@ def position_velocity(df):
 
     return df
 
+def velocity_sign_changes(df, k=5):
+    """
+    Count direction reversals in x and y velocity within a rolling window.
+    High counts indicate jitter even when mean velocity is low.
+    """
+    window = 2 * k + 1
+
+    def reversal_count(series):
+        return series.rolling(window=window, center=True, min_periods=2).apply(
+            lambda w: (np.diff(np.sign(w)) != 0).sum(), raw=True
+        )
+
+    df = df.sort_values(['film', 'instance_id', 'joint_id', 'frame_id'])
+    df['x_sign_changes_wk'] = df.groupby(['film', 'instance_id', 'joint_id'])['x_velocity'].transform(reversal_count)
+    df['y_sign_changes_wk'] = df.groupby(['film', 'instance_id', 'joint_id'])['y_velocity'].transform(reversal_count)
+    df['velocity_sign_changes_wk'] = df['x_sign_changes_wk'] + df['y_sign_changes_wk']
+    df = df.drop(columns=['x_sign_changes_wk', 'y_sign_changes_wk'])
+    return df
+
 def position_acceleration(df):
     df['position_acceleration'] = df.groupby(['film', 'instance_id', 'joint_name'])['position_velocity'].transform(
         lambda x : x.diff()
@@ -500,12 +519,13 @@ def extract_features_from_json(json_path: str, film_name: str) -> pd.DataFrame:
                     'frac_trust_wk':           -1,
                     'frac_partial_wk':         -1,
                     'frac_dont_trust_wk':      -1,
-                    'film_id':                 -1,
+                    'film_id':                 -1
                 })
 
     df = pd.DataFrame(rows)
     df = confidence_std_rolling(df, k=5)
     df = position_velocity(df)
+    df = velocity_sign_changes_wk(df)
     df = position_acceleration(df)
 
     return df
@@ -519,6 +539,7 @@ def main(csv,k):
     df = position_mean_rolling(df, k)
     df = position_std_rolling(df,k)
     df = position_velocity(df)
+    df = velocity_sign_changes(df, k)
     df = position_acceleration(df)
     df = recompute_geom(df, FILM_TO_JSON_PATHS)
     df = frames_since_trust(df)

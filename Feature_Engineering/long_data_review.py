@@ -97,4 +97,34 @@ df = pd.read_csv("Long Data.csv", low_memory=False)
 print(df.groupby('joint_name')['joint_id'].unique())
 print(df.shape)
 
+# df[df['joint_name'] == head, ]
+
+import pandas as pd
+import joblib
+
+# Load model and inference data
+model = joblib.load("../Classification/reliability_classifier_unweighted.pkl")
+df = pd.read_csv("../Classification/Predictions Long Data.csv", low_memory=False)
+
+# Filter to Ramona head
+ramona_head = df[(df['film'] == 'Ramona_1_1639') & (df['joint_name'] == 'head')]
+print(f"Ramona head inference rows: {len(ramona_head)}")
+print(f"Mean prob_unreliable: {ramona_head['prob_unreliable'].mean():.3f}")
+print(f"Median prob_unreliable: {ramona_head['prob_unreliable'].median():.3f}")
+print(f"% > 0.5: {(ramona_head['prob_unreliable'] > 0.5).mean():.1%}")
+
+# Compare feature distributions: Ramona head (inference) vs all head training data
+training = pd.read_csv("Long Data.csv", low_memory=False)
+training_head = training[(training['joint_name'] == 'head') & 
+                          (training['reliability_category_int'].notna())]
+
+FEATURES = ["mmpose_confidence", "bone_ratio", "geom_plausible",
+            "position_velocity", "position_std_x_wk"]
+
+print("\nFeature comparison (training head trust vs Ramona head inference):")
+print(f"{'Feature':<25s} {'Train (trust)':>15s} {'Ramona (inf)':>15s}")
+for col in FEATURES:
+    train_trust = training_head[training_head['reliability_category_int'] == 0][col].mean()
+    ramona_inf = pd.to_numeric(ramona_head[col], errors='coerce').mean()
+    print(f"{col:<25s} {train_trust:>15.3f} {ramona_inf:>15.3f}")
 

@@ -178,10 +178,13 @@ def build_cleaned_json_per_film(original_json_path, df, output_path, film):
     # build lookup with H36M joint_ids as keys
     lookup = {}
     for ind, row in df.iterrows():
-        coco_id = int(row['joint_id'])
-        h36m_id = COCO_TO_H36M.get(coco_id)
-        if h36m_id is None:
-            continue
+        # coco_id = int(row['joint_id'])
+        # h36m_id = COCO_TO_H36M.get(coco_id)
+        # if h36m_id is None:
+        #     continue
+        # key = (row['frame_id'], row['instance_id'], h36m_id)
+
+        h36m_id = int(row['joint_id'])  # already H36M, no conversion needed
         key = (row['frame_id'], row['instance_id'], h36m_id)
         lookup[key] = {
             'x':               row['x'],
@@ -191,7 +194,7 @@ def build_cleaned_json_per_film(original_json_path, df, output_path, film):
         }
 
     for frame in data['instance_info']:
-        frame_id = int(frame['frame_id']) - 1
+        frame_id = int(frame['frame_id'])
 
         for instance_id, instance in enumerate(frame.get('instances', [])):
 
@@ -212,26 +215,41 @@ def build_cleaned_json_per_film(original_json_path, df, output_path, film):
             new_interpolated = [False] * 17
 
             # Step 3b: propagate reliability to computed H36M joints
+            # Step 3b: propagate reliability to computed H36M joints
             l_hip_prob = get_prob(lookup, frame_id, instance_id, 4)
             r_hip_prob = get_prob(lookup, frame_id, instance_id, 1)
             l_sho_prob = get_prob(lookup, frame_id, instance_id, 11)
             r_sho_prob = get_prob(lookup, frame_id, instance_id, 14)
 
+            # root
             if l_hip_prob is not None and r_hip_prob is not None:
-                new_scores[0] = geometric_mean([l_hip_prob, r_hip_prob])   # root
+                new_scores[0] = geometric_mean([l_hip_prob, r_hip_prob])
+            else:
+                new_scores[0] = 0.0
 
-            torso_probs = [p for p in [l_hip_prob, r_hip_prob, l_sho_prob, r_sho_prob]
-                           if p is not None]
+            # spine, thorax
+            torso_probs = [p for p in [l_hip_prob, r_hip_prob, l_sho_prob, r_sho_prob] if p is not None]
             if torso_probs:
-                new_scores[7] = geometric_mean(torso_probs)  # spine
-                new_scores[8] = geometric_mean(torso_probs)  # thorax
+                new_scores[7] = geometric_mean(torso_probs)
+                new_scores[8] = geometric_mean(torso_probs)
+            else:
+                new_scores[7] = 0.0
+                new_scores[8] = 0.0
 
+            # neck_base
             if l_sho_prob is not None and r_sho_prob is not None:
-                new_scores[9] = geometric_mean([l_sho_prob, r_sho_prob])   # neck_base
+                new_scores[9] = geometric_mean([l_sho_prob, r_sho_prob])
+            else:
+                new_scores[9] = 0.0
 
+            # head (no source joints in inference space; always 0.0)
+            # new_scores[10] = 0.0
             head_prob = get_prob(lookup, frame_id, instance_id, 10)
+
             if head_prob is not None:
                 new_scores[10] = head_prob
+            else:
+                new_scores[10] = 0.0  # No classifier prediction for head; treat as reliable
 
             # Step 4: overwrite direct joints with cleaned values where available
             for joint_id_h36m in range(17):
@@ -398,8 +416,16 @@ if __name__ == "__main__":
     main(
         film = 'Ramona_1_1639',
         # '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/emma_clip_results_2/Moonlight_2016/Moonlight_2016/segment_1_1529.json',
-        json = '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Data Folders (MP4 and JSON)/ramona-demo-clip 1_1369/segment_1_1639.json',
-        csv = '/Users/emmavejcik/Desktop/DeepScreens/Feature_Engineering/Long_Long_Data_with_probs.csv',
+        json = '/Users/emmavejcik/Desktop/DeepScreens/Manual Data Collection/Raw 133s/segment_1_1639.json',
+        csv = '/Users/emmavejcik/Desktop/DeepScreens/Classification/Predictions Long Data.csv',
         output_path = '/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/Ramona_1_1639_pred_aggregated.json'
     )
 
+import json
+with open("Outputs/Ramona_1_1639_pred_aggregated.json") as f:
+    data = json.load(f)
+print("Frame 1 scores:", data['instance_info'][0]['instances'][0]['keypoint_scores'])
+
+df = pd.read_csv("../Feature_Engineering/Long Long Data.csv")
+print(df['joint_id'].unique())
+print(df.groupby('joint_name')['joint_id'].unique())

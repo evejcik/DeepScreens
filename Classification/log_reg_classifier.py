@@ -66,6 +66,7 @@ ALL_FEATURES = [
     "geom_plausible",
     "confidence_std_wk",
     "position_velocity",
+    "velocity_sign_changes_wk",
     "position_acceleration",
     "position_std_x_wk",
     "position_std_y_wk",

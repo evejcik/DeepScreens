@@ -19,8 +19,8 @@ def apply_cubic_spline_to_group(group_df, validity_horizon=VALIDITY_HORIZON):
     group_df = group_df.copy().sort_values('frame_id').reset_index(drop=False)
 
     # Start from Kalman output for trust/partial, raw MMPose for dont_trust
-    x_filled = group_df['x_kalman'].values.copy().astype(float)
-    y_filled = group_df['y_kalman'].values.copy().astype(float)
+    x_filled = group_df['x'].values.copy().astype(float)
+    y_filled = group_df['y'].values.copy().astype(float)
 
     rel      = group_df['reliability_category_int'].values
     frames   = group_df['frame_id'].values
@@ -76,11 +76,32 @@ def apply_cubic_spline_to_group(group_df, validity_horizon=VALIDITY_HORIZON):
                 anchor_y      = y_filled[anchor_indices]
 
                 # Fit spline through anchors
-                cs_x = CubicSpline(anchor_frames, anchor_x)
-                cs_y = CubicSpline(anchor_frames, anchor_y)
+                from scipy.interpolate import CubicSpline, interp1d
+
+                if gap_size > 8:
+                    cs_x = interp1d(anchor_frames, anchor_x, kind='linear', bounds_error=False, fill_value='extrapolate')
+                    cs_y = interp1d(anchor_frames, anchor_y, kind='linear', bounds_error=False, fill_value='extrapolate')
+                else:
+                    cs_x = CubicSpline(anchor_frames, anchor_x)
+                    cs_y = CubicSpline(anchor_frames, anchor_y)
 
                 # Fill in the dont_trust frames
                 gap_frame_ids = frames[gap_start:gap_end + 1]
+
+                # --- SPLINE DEVIATION CLAMP ---
+                x_spline = cs_x(gap_frame_ids)
+                y_spline = cs_y(gap_frame_ids)
+
+                # Linear interpolation between the two boundary anchors
+                t = ((gap_frame_ids - frames[left_anchor]) /
+                    (frames[right_anchor] - frames[left_anchor]))
+                x_linear = x_filled[left_anchor] + t * (x_filled[right_anchor] - x_filled[left_anchor])
+                y_linear = y_filled[left_anchor] + t * (y_filled[right_anchor] - y_filled[left_anchor])
+
+                # Per-frame: if spline deviates more than threshold from linear, use linear instead
+                MAX_SPLINE_DEVIATION = 40  # pixels — tune if needed
+                deviation = np.sqrt((x_spline - x_linear)**2 + (y_spline - y_linear)**2)
+                use_spline = deviation <= MAX_SPLINE_DEVIATION
                 x_filled[gap_start:gap_end + 1] = cs_x(gap_frame_ids)
                 y_filled[gap_start:gap_end + 1] = cs_y(gap_frame_ids)
 

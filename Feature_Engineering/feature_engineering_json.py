@@ -129,6 +129,7 @@ def json_to_csv(json, film: str):
                        bone_ratio,
                        film,
                        reliability_category_int,
+                       velocity_sign_changes,
                        confidence_std_wk,
                        position_mean_x_wk,
                        position_mean_y_wk,
@@ -217,6 +218,26 @@ def position_velocity(df):
     
     df['position_velocity'] = np.sqrt(df['x_velocity']**2 + df['y_velocity']**2)
 
+    return df
+
+
+def velocity_sign_changes(df, k=5):
+    """
+    Count direction reversals in x and y velocity within a rolling window.
+    High counts indicate jitter even when mean velocity is low.
+    """
+    window = 2 * k + 1
+
+    def reversal_count(series):
+        return series.rolling(window=window, center=True, min_periods=2).apply(
+            lambda w: (np.diff(np.sign(w)) != 0).sum(), raw=True
+        )
+
+    df = df.sort_values(['film', 'instance_id', 'joint_id', 'frame_id'])
+    df['x_sign_changes_wk'] = df.groupby(['film', 'instance_id', 'joint_id'])['x_velocity'].transform(reversal_count)
+    df['y_sign_changes_wk'] = df.groupby(['film', 'instance_id', 'joint_id'])['y_velocity'].transform(reversal_count)
+    df['velocity_sign_changes_wk'] = df['x_sign_changes_wk'] + df['y_sign_changes_wk']
+    df = df.drop(columns=['x_sign_changes_wk', 'y_sign_changes_wk'])
     return df
 
 def position_acceleration(df):
@@ -403,6 +424,7 @@ def main(json, film, annotated_csv, k):
                             "position_std_x_wk",
                             "position_std_y_wk",
                             "position_velocity",
+                            "velocity_sign_changes_wk",
                             "position_acceleration",
                             "frames_since_trust",
                             "frames_since_dont_trust",
@@ -418,6 +440,7 @@ def main(json, film, annotated_csv, k):
     df = position_mean_rolling(df, k)
     df = position_std_rolling(df,k)
     df = position_velocity(df)
+    df = velocity_sign_changes(df)
     df = position_acceleration(df)
     df = compute_boundary_distance(df, frame_width, frame_height)
     # df = frames_since_trust(df)

@@ -2,7 +2,7 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from kalman import apply_kalman_filter
+# from kalman import apply_kalman_filter
 from cubic_spline import apply_cubic_spline
 
 UNRELIABLE_THRESHOLD = 0.5
@@ -47,7 +47,7 @@ def json_to_dataframe(data: dict, film: str, threshold: float) -> pd.DataFrame:
                     'x':                       kps[joint_id][0],
                     'y':                       kps[joint_id][1],
                     'prob_unreliable':         prob,
-                    'reliability_category_int': 1 if prob > threshold else 0,
+                    'reliability_category_int': 0 if joint_id == 0 else (1 if prob > threshold else 0),
                     'already_interpolated':    interp[joint_id],
                 })
 
@@ -83,7 +83,11 @@ def dataframe_to_json(data: dict, df: pd.DataFrame) -> dict:
                 row = lookup.loc[key]
                 new_kps[joint_id]    = [float(row['x_filled']), float(row['y_filled'])]
                 # Mark as interpolated if it was flagged unreliable and got filled
-                if row['reliability_category_int'] == 1:
+                coords_changed = (
+                    abs(float(row['x_filled']) - float(row['x'])) > 1e-6 or
+                    abs(float(row['y_filled']) - float(row['y'])) > 1e-6
+                )
+                if row['reliability_category_int'] == 1 and coords_changed:
                     new_interp[joint_id] = True
 
             instance['keypoints']             = new_kps
@@ -111,7 +115,7 @@ def run_interpolation_pipeline(json_path: str, output_path: str, film: str,
     print(id_check.to_string(index=False))
     assert df['joint_id'].max() == 16, "Joint IDs exceed H36M range — possible COCO bleed-through"
 
-    df = apply_kalman_filter(df)
+    # df = apply_kalman_filter(df)
     df = apply_cubic_spline(df, validity_horizon=validity_horizon)
 
     data = dataframe_to_json(data, df)
@@ -160,6 +164,6 @@ if __name__ == '__main__':
 #run as: 
 # python interpolation_pipeline.py \
 #   --json '/Users/emmavejcik/Desktop/DeepScreens/From DeepScreens Github/Outputs/Ramona_1_1639_pred_aggregated.json' \
-#   --output '/Users/emmavejcik/Desktop/DeepScreens/Interpolation/2D Interpolation/Outputs/Ramona_1_1639_interpolated.json' \
+#   --output '/Users/emmavejcik/Desktop/DeepScreens/Interpolation/2D Interpolation/Outputs/Ramona_1_1639_interpolated_0.5.json' \
 #   --film Ramona_1_1639 \
 #   --threshold 0.5
